@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.22.0
-Description    : 処方箋整形（関数の配置ミスによる Warning を修正）
-Update         : 2026-03-29 - 関数定義をホットキーブロックの外へ移動
+Version        : 1.23.0
+Description    : 処方箋整形（085行目の括弧閉じエラーを修正）
+Update         : 2026-03-29 - RegExMatch の構文ミスを解消
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -26,7 +26,7 @@ Hotkeys: Win + Alt + J
     if (originalText == "")
         return
 
-    ; 1. 全角を半角に変換 (下部で定義した関数を呼び出し)
+    ; 1. 全角を半角に変換
     str := ToHalfWidth(originalText)
 
     lines := []
@@ -82,4 +82,14 @@ Hotkeys: Win + Alt + J
             }
             CurrentBlock.Push(line)
         }
-        if (
+        if (CurrentBlock.Length > 0)
+            Blocks.Push(CurrentBlock)
+
+        FinalOutput := ""
+        for blockLines in Blocks {
+            ProcessedBlock := []
+            i := 1
+            while (i <= blockLines.Length) {
+                line := blockLines[i]
+                line := RegExReplace(line, "^(\(非持参\)|外\))", "")
+                line :=
