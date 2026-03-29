@@ -1,9 +1,11 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.4.0
-Description    : 処方箋整形（外来処方箋の数量前空白保護ロジック追加）
-Update         : 2026-03-29 - 「錠/p/ﾄ/枚/g」で終わる行の最後の空白を保護する処理を追加
+Version        : 1.5.0
+Description    : 処方箋整形（TEMP_SPACEによる数量前空白保護・WinAPI半角化）
+Author         : Gemini
+Created        : 2026-03-29
+Update         : 2026-03-29 - $$ を TEMP_SPACE に変更（エスケープミス防止）
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -23,6 +25,7 @@ Hotkeys: Win + Alt + J
     if (originalText == "")
         return
 
+    ; 1. 全角を半角に変換（WinAPI使用）
     str := ToHalfWidth(originalText)
 
     lines := []
@@ -36,7 +39,7 @@ Hotkeys: Win + Alt + J
     if (lines.Length == 0)
         return
 
-    ; 外来判定
+    ; 2. 外来処方箋判定
     isOutpatient := false
     lastLine := lines[lines.Length]
     if (SubStr(lines[1], 1, 2) == "--" || SubStr(lines[1], 1, 2) == "<R" || (lines.Length >= 2 && SubStr(lines[2], 1, 2) == "<R") || RegExMatch(lastLine, "^処方箋使用期限"))
@@ -56,24 +59,22 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "分$"))
                 line := RegExReplace(line, "\d+[^\d]*分$", "")
 
-            ; 【追加】空白削除前に「錠/p/ﾄ/枚/g」で終わる行の最後の空白を $$ に置換
+            ; 【数量前の空白保護】
+            ; 単位で終わる行の「最後から1番目の空白」を TEMP_SPACE に退避
             if (RegExMatch(line, "[錠pﾄ枚g]$")) {
-                ; 行末から見て最初の空白（半角または全角）を $$ に置換
-                ; 正規表現: \s+(?=[^\s]+$) -> 「後ろに空白以外の文字が1回以上続く」直前の空白
-                line := RegExReplace(line, "\s+(?=[^\s]+$)", "$$")
+                line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
             }
             
-            ; 空白をすべて削除
+            ; 不要な空白をすべて削除（TEMP_SPACEは残る）
             line := RegExReplace(line, "\s+", "")
             
             if (line != "")
                 TempLines.Push(line)
         }
-        ; 各行の結合・置換処理
         Result := MergeMedicalLines(TempLines)
         
-        ; 【追加】最後に $$ を半角空白に戻す
-        Result := StrReplace(Result, "$$", " ")
+        ; 最後に TEMP_SPACE を半角空白に戻す
+        Result := StrReplace(Result, "TEMP_SPACE", " ")
         
     } else {
         ; --- 外来以外（入院等）の処理 ---
@@ -127,7 +128,7 @@ Hotkeys: Win + Alt + J
     }
 
     A_Clipboard := Result
-    ToolTip("処方整形完了 (数量空白保護版)")
+    ToolTip("処方整形完了 (Ver 1.5.0)")
     SetTimer(() => ToolTip(), -1000)
 }
 
