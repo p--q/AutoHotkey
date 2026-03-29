@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.21.0
-Description    : 処方箋整形（行末の「数字＋分」を数字ごと削除する修正）
-Update         : 2026-03-29 - 行末の「18日分」や「分1」を確実に削除
+Version        : 1.22.0
+Description    : 処方箋整形（関数の配置ミスによる Warning を修正）
+Update         : 2026-03-29 - 関数定義をホットキーブロックの外へ移動
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -12,6 +12,9 @@ Hotkeys: Win + Alt + J
 #Requires AutoHotkey v2.0
 #SingleInstance Force
 
+; ==============================================================================
+; メインホットキー: Win + Alt + J
+; ==============================================================================
 #!j::
 {
     try {
@@ -23,7 +26,7 @@ Hotkeys: Win + Alt + J
     if (originalText == "")
         return
 
-    ; 1. 全角を半角に変換
+    ; 1. 全角を半角に変換 (下部で定義した関数を呼び出し)
     str := ToHalfWidth(originalText)
 
     lines := []
@@ -53,13 +56,10 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)"))
                 continue
             
-            ; 数量前の空白保護
             if (RegExMatch(line, "i)[錠pﾄ枚gc]$"))
                 line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
 
-            ; 行末の掃除
             line := CleanLineEndings(line)
-            
             line := RegExReplace(line, "\s+", "")
             
             if (line != "")
@@ -82,49 +82,4 @@ Hotkeys: Win + Alt + J
             }
             CurrentBlock.Push(line)
         }
-        if (CurrentBlock.Length > 0)
-            Blocks.Push(CurrentBlock)
-
-        FinalOutput := ""
-        for blockLines in Blocks {
-            ProcessedBlock := []
-            i := 1
-            while (i <= blockLines.Length) {
-                line := blockLines[i]
-                line := RegExReplace(line, "^(\(非持参\)|外\))", "")
-                line := RegExReplace(line, "\([^)]+として\)", "")
-
-                ; 次の行を結合するかどうかの判定
-                while (i < blockLines.Length) {
-                    if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$"))
-                        break
-                    nextLine := blockLines[i+1]
-                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$| )|発熱時|疼痛時|不眠時)"))
-                        break
-                    line .= nextLine
-                    i++
-                }
-
-                ; 数量前の空白を退避
-                if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$"))
-                    line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
-
-                ; 行末の掃除
-                line := CleanLineEndings(line)
-
-                line := RegExReplace(line, "\s+", "")
-                if (line != "")
-                    ProcessedBlock.Push(line)
-                i++
-            }
-            FinalOutput .= MergeMedicalLines(ProcessedBlock) . "`n"
-        }
-        Result := StrReplace(Trim(FinalOutput, "`n"), "TEMP_SPACE", " ")
-    }
-
-    A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver 1.21.0)")
-    SetTimer(() => ToolTip(), -1000)
-}
-
-; ---
+        if (
