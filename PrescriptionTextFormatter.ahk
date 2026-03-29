@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.14.0
-Description    : 処方箋整形（構文エラー "075: {" の完全修正版）
-Update         : 2026-03-29 - if/else 構造と波括弧の対応を完全に整理
+Version        : 1.15.0
+Description    : 処方箋整形（入院処方でも数量前の空白を保護するよう修正）
+Update         : 2026-03-29 - 外来以外（入院等）の処理にも TEMP_SPACE ロジックを適用
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -53,6 +53,7 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)"))
                 continue
             
+            ; 数量前の空白保護
             if (RegExMatch(line, "[錠pﾄ枚g]$"))
                 line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
 
@@ -96,15 +97,20 @@ Hotkeys: Win + Alt + J
                 line := RegExReplace(line, "^(\(非持参\)|外\))", "")
                 line := RegExReplace(line, "\([^)]+として\)", "")
 
+                ; 複数行にわたる薬品名の結合
                 while (i < blockLines.Length) {
                     if (RegExMatch(line, "[錠pﾄ枚g]$"))
                         break
                     nextLine := blockLines[i+1]
-                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$)|発熱時(TEMP_SPACE|$)|疼痛時(TEMP_SPACE|$)|不眠時(TEMP_SPACE|$))"))
+                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$| )|発熱時|疼痛時|不眠時)"))
                         break
                     line .= nextLine
                     i++
                 }
+
+                ; 【追加】入院処方でも数量前の空白を保護
+                if (RegExMatch(line, "[錠pﾄ枚g]$"))
+                    line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
 
                 if (RegExMatch(line, "i)cap$"))
                     line := RegExReplace(line, "i)cap$", "c")
@@ -119,12 +125,13 @@ Hotkeys: Win + Alt + J
             }
             FinalOutput .= MergeMedicalLines(ProcessedBlock) . "`n"
         }
-        Result := Trim(FinalOutput, "`n")
+        ; 最後に TEMP_SPACE を半角空白に戻す
+        Result := StrReplace(Trim(FinalOutput, "`n"), "TEMP_SPACE", " ")
     }
 
     ; 3. 結果の出力
     A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver 1.14.0)")
+    ToolTip("処方整形完了 (Ver 1.15.0)")
     SetTimer(() => ToolTip(), -1000)
 }
 
@@ -144,25 +151,4 @@ MergeMedicalLines(lineArray) {
             if (RegExMatch(line, "i)^.*?(" . kw . ")(TEMP_SPACE|$)", &match)) {
                 matchedPart := match[0]
                 remainingPart := LTrim(SubStr(line, StrLen(matchedPart) + 1))
-                output := RegExReplace(output, "\r?\n$", "") . matchedPart . "`n"
-                if (remainingPart != "")
-                    output .= remainingPart . "`n"
-            } else {
-                output .= line . "`n"
-            }
-        } 
-        else {
-            output .= line . "`n"
-        }
-    }
-    return Trim(output, "`n")
-}
-
-; --- サブ関数：全角から半角へ ---
-ToHalfWidth(str) {
-    size := DllCall("LCMapStringW", "UInt", 0x0411, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
-    buf := Buffer(size * 2)
-    DllCall("LCMapStringW", "UInt", 0x0411, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
-    result := StrGet(buf, "UTF-16")
-    return StrReplace(result, "　", " ")
-}
+                output
