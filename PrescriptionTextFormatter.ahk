@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.20.0
-Description    : 処方箋整形（用法以降の不要な文字列削除の強化）
-Update         : 2026-03-29 - 入院処方での「18日分」等の残存問題を修正
+Version        : 1.21.0
+Description    : 処方箋整形（行末の「数字＋分」を数字ごと削除する修正）
+Update         : 2026-03-29 - 行末の「18日分」や「分1」を確実に削除
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -57,8 +57,8 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "i)[錠pﾄ枚gc]$"))
                 line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
 
-            ; 用法の掃除（数量より後の「分」以降を消す）
-            line := CleanMedicalUsage(line)
+            ; 行末の掃除
+            line := CleanLineEndings(line)
             
             line := RegExReplace(line, "\s+", "")
             
@@ -109,8 +109,8 @@ Hotkeys: Win + Alt + J
                 if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$"))
                     line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
 
-                ; 用法の掃除（数量より後の「分」以降を消す）
-                line := CleanMedicalUsage(line)
+                ; 行末の掃除
+                line := CleanLineEndings(line)
 
                 line := RegExReplace(line, "\s+", "")
                 if (line != "")
@@ -123,64 +123,8 @@ Hotkeys: Win + Alt + J
     }
 
     A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver 1.20.0)")
+    ToolTip("処方整形完了 (Ver 1.21.0)")
     SetTimer(() => ToolTip(), -1000)
 }
 
-; --- 用法部分の掃除（数量以降をカットし、分Nを整形） ---
-CleanMedicalUsage(line) {
-    ; cap -> c 置換
-    if (RegExMatch(line, "i)cap$"))
-        line := RegExReplace(line, "i)cap$", "c")
-    
-    ; 「分1 朝食後 18日分...」のように「分」で始まる用法部分を掃除
-    ; 数量単位（錠pﾄ枚gc）の後に「分」がある場合、そこから後ろを消すが、数字だけ残す
-    if (RegExMatch(line, "i)(?<=[錠pﾄ枚gc])\s*分(\d+).*", &match)) {
-        ; 「分1」の部分から数字だけ取り出して置換
-        line := RegExReplace(line, "i)\s*分\d+.*$", match[1])
-    }
-    
-    ; 単に「14日分」などのゴミが残っている場合の削除
-    line := RegExReplace(line, "\d+[^\d]*分$", "")
-    
-    return line
-}
-
-; --- サブ関数：行結合ルール ---
-MergeMedicalLines(lineArray) {
-    output := ""
-    kw := "発熱時|疼痛時|不眠時|頓用|の時|時"
-    
-    for line in lineArray {
-        if (SubStr(line, 1, 1) == "分") {
-            line := StrReplace(line, "毎食後", "")
-            line := StrReplace(line, "食後", "")
-            line := StrReplace(line, "眠前", "寝")
-            output := RegExReplace(output, "\r?\n$", "") . line . "`n"
-        } 
-        else if (RegExMatch(line, "i)(" . kw . ")(TEMP_SPACE|$)")) {
-            if (RegExMatch(line, "i)^.*?(" . kw . ")(TEMP_SPACE|$)", &match)) {
-                matchedPart := match[0]
-                remainingPart := LTrim(SubStr(line, StrLen(matchedPart) + 1))
-                output := RegExReplace(output, "\r?\n$", "") . matchedPart . "`n"
-                if (remainingPart != "")
-                    output .= remainingPart . "`n"
-            } else {
-                output .= line . "`n"
-            }
-        } 
-        else {
-            output .= line . "`n"
-        }
-    }
-    return Trim(output, "`n")
-}
-
-; --- サブ関数：全角から半角へ ---
-ToHalfWidth(str) {
-    size := DllCall("LCMapStringW", "UInt", 0x0411, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
-    buf := Buffer(size * 2)
-    DllCall("LCMapStringW", "UInt", 0x0411, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
-    result := StrGet(buf, "UTF-16")
-    return StrReplace(result, "　", " ")
-}
+; ---
