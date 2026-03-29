@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.19.0
-Description    : 処方箋整形（入院処方の c 置換および結合条件の修正）
-Update         : 2026-03-29 - 入院処方の結合判定に "c" を追加
+Version        : 1.20.0
+Description    : 処方箋整形（用法以降の不要な文字列削除の強化）
+Update         : 2026-03-29 - 入院処方での「18日分」等の残存問題を修正
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -53,15 +53,12 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)"))
                 continue
             
-            ; 数量前の空白保護（capがcになる前なので p で判定）
+            ; 数量前の空白保護
             if (RegExMatch(line, "i)[錠pﾄ枚gc]$"))
                 line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
 
-            if (RegExMatch(line, "i)cap$"))
-                line := RegExReplace(line, "i)cap$", "c")
-            
-            if (RegExMatch(line, "分$"))
-                line := RegExReplace(line, "\d+[^\d]*分$", "")
+            ; 用法の掃除（数量より後の「分」以降を消す）
+            line := CleanMedicalUsage(line)
             
             line := RegExReplace(line, "\s+", "")
             
@@ -73,7 +70,7 @@ Hotkeys: Win + Alt + J
     } 
     else 
     {
-        ; --- 入院処方箋（外来以外）の処理 ---
+        ; --- 外来以外（入院等）の処理 ---
         Blocks := []
         CurrentBlock := []
         for line in lines {
@@ -97,37 +94,27 @@ Hotkeys: Win + Alt + J
                 line := RegExReplace(line, "^(\(非持参\)|外\))", "")
                 line := RegExReplace(line, "\([^)]+として\)", "")
 
-                ; 次の行を結合するかどうかの判定ループ
+                ; 次の行を結合するかどうかの判定
                 while (i < blockLines.Length) {
-                    ; すでに単位（錠pﾄ枚gc）で終わっている、または cap で終わっているなら結合停止
-                    if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$")) {
+                    if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$"))
                         break
-                    }
                     nextLine := blockLines[i+1]
-                    ; 次の行が用法（分、時、発熱時など）で始まるなら結合停止
-                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$| )|発熱時|疼痛時|不眠時)")) {
+                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$| )|発熱時|疼痛時|不眠時)"))
                         break
-                    }
                     line .= nextLine
                     i++
                 }
 
-                ; 【重要】空白を消す前に数量前の空白を退避（c, cap 両方に対応）
-                if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$")) {
+                ; 数量前の空白を退避
+                if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$"))
                     line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
-                }
 
-                ; cap -> c 置換
-                if (RegExMatch(line, "i)cap$"))
-                    line := RegExReplace(line, "i)cap$", "c")
-                
-                if (RegExMatch(line, "分$"))
-                    line := RegExReplace(line, "\d+[^\d]*分$", "")
+                ; 用法の掃除（数量より後の「分」以降を消す）
+                line := CleanMedicalUsage(line)
 
                 line := RegExReplace(line, "\s+", "")
-                if (line != "") {
+                if (line != "")
                     ProcessedBlock.Push(line)
-                }
                 i++
             }
             FinalOutput .= MergeMedicalLines(ProcessedBlock) . "`n"
@@ -135,10 +122,28 @@ Hotkeys: Win + Alt + J
         Result := StrReplace(Trim(FinalOutput, "`n"), "TEMP_SPACE", " ")
     }
 
-    ; 3. クリップボードへ出力
     A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver 1.19.0)")
+    ToolTip("処方整形完了 (Ver 1.20.0)")
     SetTimer(() => ToolTip(), -1000)
+}
+
+; --- 用法部分の掃除（数量以降をカットし、分Nを整形） ---
+CleanMedicalUsage(line) {
+    ; cap -> c 置換
+    if (RegExMatch(line, "i)cap$"))
+        line := RegExReplace(line, "i)cap$", "c")
+    
+    ; 「分1 朝食後 18日分...」のように「分」で始まる用法部分を掃除
+    ; 数量単位（錠pﾄ枚gc）の後に「分」がある場合、そこから後ろを消すが、数字だけ残す
+    if (RegExMatch(line, "i)(?<=[錠pﾄ枚gc])\s*分(\d+).*", &match)) {
+        ; 「分1」の部分から数字だけ取り出して置換
+        line := RegExReplace(line, "i)\s*分\d+.*$", match[1])
+    }
+    
+    ; 単に「14日分」などのゴミが残っている場合の削除
+    line := RegExReplace(line, "\d+[^\d]*分$", "")
+    
+    return line
 }
 
 ; --- サブ関数：行結合ルール ---
@@ -158,9 +163,8 @@ MergeMedicalLines(lineArray) {
                 matchedPart := match[0]
                 remainingPart := LTrim(SubStr(line, StrLen(matchedPart) + 1))
                 output := RegExReplace(output, "\r?\n$", "") . matchedPart . "`n"
-                if (remainingPart != "") {
+                if (remainingPart != "")
                     output .= remainingPart . "`n"
-                }
             } else {
                 output .= line . "`n"
             }
