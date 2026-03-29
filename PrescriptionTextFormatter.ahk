@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.3.0
-Description    : 処方箋整形（WinAPI半角化・末尾日数削除ロジック修正版）
-Update         : 2026-03-29 - 「4日分」などの数字と分の間に文字があるケースに対応
+Version        : 1.4.0
+Description    : 処方箋整形（外来処方箋の数量前空白保護ロジック追加）
+Update         : 2026-03-29 - 「錠/p/ﾄ/枚/g」で終わる行の最後の空白を保護する処理を追加
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -44,6 +44,7 @@ Hotkeys: Win + Alt + J
 
     Result := ""
     if (isOutpatient) {
+        ; --- 外来処方箋の処理 ---
         TempLines := []
         for line in lines {
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)"))
@@ -52,17 +53,30 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "i)cap$"))
                 line := RegExReplace(line, "i)cap$", "c")
             
-            ; --- 修正箇所：末尾の数字以降を削除 ---
             if (RegExMatch(line, "分$"))
                 line := RegExReplace(line, "\d+[^\d]*分$", "")
+
+            ; 【追加】空白削除前に「錠/p/ﾄ/枚/g」で終わる行の最後の空白を $$ に置換
+            if (RegExMatch(line, "[錠pﾄ枚g]$")) {
+                ; 行末から見て最初の空白（半角または全角）を $$ に置換
+                ; 正規表現: \s+(?=[^\s]+$) -> 「後ろに空白以外の文字が1回以上続く」直前の空白
+                line := RegExReplace(line, "\s+(?=[^\s]+$)", "$$")
+            }
             
+            ; 空白をすべて削除
             line := RegExReplace(line, "\s+", "")
+            
             if (line != "")
                 TempLines.Push(line)
         }
+        ; 各行の結合・置換処理
         Result := MergeMedicalLines(TempLines)
+        
+        ; 【追加】最後に $$ を半角空白に戻す
+        Result := StrReplace(Result, "$$", " ")
+        
     } else {
-        ; 外来以外
+        ; --- 外来以外（入院等）の処理 ---
         Blocks := []
         CurrentBlock := []
         for line in lines {
@@ -99,7 +113,6 @@ Hotkeys: Win + Alt + J
                 if (RegExMatch(line, "i)cap$"))
                     line := RegExReplace(line, "i)cap$", "c")
                 
-                ; --- 修正箇所：末尾の数字以降を削除 ---
                 if (RegExMatch(line, "分$"))
                     line := RegExReplace(line, "\d+[^\d]*分$", "")
 
@@ -114,10 +127,11 @@ Hotkeys: Win + Alt + J
     }
 
     A_Clipboard := Result
-    ToolTip("処方整形完了 (修正版)")
+    ToolTip("処方整形完了 (数量空白保護版)")
     SetTimer(() => ToolTip(), -1000)
 }
 
+; --- サブ関数：分・時の結合ルール ---
 MergeMedicalLines(lineArray) {
     output := ""
     for line in lineArray {
@@ -135,6 +149,7 @@ MergeMedicalLines(lineArray) {
     return Trim(output, "`n")
 }
 
+; --- サブ関数：全角から半角へ ---
 ToHalfWidth(str) {
     size := DllCall("LCMapStringW", "UInt", 0x0411, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
