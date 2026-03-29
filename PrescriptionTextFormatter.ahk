@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.15.0
-Description    : 処方箋整形（入院処方でも数量前の空白を保護するよう修正）
-Update         : 2026-03-29 - 外来以外（入院等）の処理にも TEMP_SPACE ロジックを適用
+Version        : 1.16.0
+Description    : 処方箋整形（構文エラー "151: {" の完全修正版）
+Update         : 2026-03-29 - MergeMedicalLines 内の波括弧の対応を完全に修正
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -47,13 +47,11 @@ Hotkeys: Win + Alt + J
     Result := ""
     if (isOutpatient) 
     {
-        ; --- 外来処方箋の処理ブロック ---
         TempLines := []
         for line in lines {
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)"))
                 continue
             
-            ; 数量前の空白保護
             if (RegExMatch(line, "[錠pﾄ枚g]$"))
                 line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
 
@@ -73,7 +71,6 @@ Hotkeys: Win + Alt + J
     } 
     else 
     {
-        ; --- 外来以外（入院等）の処理ブロック ---
         Blocks := []
         CurrentBlock := []
         for line in lines {
@@ -97,7 +94,6 @@ Hotkeys: Win + Alt + J
                 line := RegExReplace(line, "^(\(非持参\)|外\))", "")
                 line := RegExReplace(line, "\([^)]+として\)", "")
 
-                ; 複数行にわたる薬品名の結合
                 while (i < blockLines.Length) {
                     if (RegExMatch(line, "[錠pﾄ枚g]$"))
                         break
@@ -108,7 +104,6 @@ Hotkeys: Win + Alt + J
                     i++
                 }
 
-                ; 【追加】入院処方でも数量前の空白を保護
                 if (RegExMatch(line, "[錠pﾄ枚g]$"))
                     line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
 
@@ -125,13 +120,11 @@ Hotkeys: Win + Alt + J
             }
             FinalOutput .= MergeMedicalLines(ProcessedBlock) . "`n"
         }
-        ; 最後に TEMP_SPACE を半角空白に戻す
         Result := StrReplace(Trim(FinalOutput, "`n"), "TEMP_SPACE", " ")
     }
 
-    ; 3. 結果の出力
     A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver 1.15.0)")
+    ToolTip("処方整形完了 (Ver 1.16.0)")
     SetTimer(() => ToolTip(), -1000)
 }
 
@@ -141,14 +134,4 @@ MergeMedicalLines(lineArray) {
     kw := "発熱時|疼痛時|不眠時|頓用|の時|時"
     
     for line in lineArray {
-        if (SubStr(line, 1, 1) == "分") {
-            line := StrReplace(line, "毎食後", "")
-            line := StrReplace(line, "食後", "")
-            line := StrReplace(line, "眠前", "寝")
-            output := RegExReplace(output, "\r?\n$", "") . line . "`n"
-        } 
-        else if (RegExMatch(line, "i)(" . kw . ")(TEMP_SPACE|$)")) {
-            if (RegExMatch(line, "i)^.*?(" . kw . ")(TEMP_SPACE|$)", &match)) {
-                matchedPart := match[0]
-                remainingPart := LTrim(SubStr(line, StrLen(matchedPart) + 1))
-                output
+        if (SubStr(line, 1, 1) == "分
