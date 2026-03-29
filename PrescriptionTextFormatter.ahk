@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.23.0
-Description    : 処方箋整形（085行目の括弧閉じエラーを修正）
-Update         : 2026-03-29 - RegExMatch の構文ミスを解消
+Version        : 1.24.0
+Description    : 処方箋整形（092行目の While 閉じ忘れを完全修正）
+Update         : 2026-03-29 - 入院処方ブロックの構造を再整理
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -86,10 +86,24 @@ Hotkeys: Win + Alt + J
             Blocks.Push(CurrentBlock)
 
         FinalOutput := ""
+        ; --- ブロックごとのループ ---
         for blockLines in Blocks {
             ProcessedBlock := []
             i := 1
+            ; --- 行ごとのループ (ここが092行目付近) ---
             while (i <= blockLines.Length) {
                 line := blockLines[i]
                 line := RegExReplace(line, "^(\(非持参\)|外\))", "")
-                line :=
+                line := RegExReplace(line, "\([^)]+として\)", "")
+
+                ; 次の行を薬品名として結合するか判定するループ
+                while (i < blockLines.Length) {
+                    if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$"))
+                        break
+                    
+                    nextLine := blockLines[i+1]
+                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$| )|発熱時|疼痛時|不眠時)"))
+                        break
+                    
+                    line .= nextLine
+                    i++
