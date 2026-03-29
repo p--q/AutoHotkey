@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.10.0
-Description    : 処方箋整形（「時」の直後が空白・行末の場合のみ結合）
-Update         : 2026-03-29 - 結合条件を「時＋空白」または「時＋行末」に限定
+Version        : 1.11.0
+Description    : 処方箋整形（正規表現エラーの修正・「時」結合ロジック完成版）
+Update         : 2026-03-29 - Missing ")" エラーを修正
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -95,7 +95,7 @@ Hotkeys: Win + Alt + J
                     if (RegExMatch(line, "[錠pﾄ枚g]$"))
                         break
                     nextLine := blockLines[i+1]
-                    ; 次行の結合判定（分、または時＋空白/行末、または発熱時など）
+                    ; 次行の結合判定
                     if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$)|発熱時(TEMP_SPACE|$)|疼痛時(TEMP_SPACE|$)|不眠時(TEMP_SPACE|$))"))
                         break
                     line .= nextLine
@@ -105,4 +105,39 @@ Hotkeys: Win + Alt + J
                 if (RegExMatch(line, "i)cap$"))
                     line := RegExReplace(line, "i)cap$", "c")
                 
-                if (RegExMatch
+                if (RegExMatch(line, "分$"))
+                    line := RegExReplace(line, "\d+[^\d]*分$", "")
+
+                line := RegExReplace(line, "\s+", "")
+                if (line != "")
+                    ProcessedBlock.Push(line)
+                i++
+            }
+            FinalOutput .= MergeMedicalLines(ProcessedBlock) . "`n"
+        }
+        Result := Trim(FinalOutput, "`n")
+    }
+
+    A_Clipboard := Result
+    ToolTip("処方整形完了 (Ver 1.11.0)")
+    SetTimer(() => ToolTip(), -1000)
+}
+
+; --- サブ関数：行結合ルール ---
+MergeMedicalLines(lineArray) {
+    output := ""
+    ; キーワードの定義（カッコを含まない形に修正）
+    kw := "発熱時|疼痛時|不眠時|頓用|の時|時"
+    
+    for line in lineArray {
+        ; 1. 「分」から始まる行
+        if (SubStr(line, 1, 1) == "分") {
+            line := StrReplace(line, "毎食後", "")
+            line := StrReplace(line, "食後", "")
+            line := StrReplace(line, "眠前", "寝")
+            output := RegExReplace(output, "\r?\n$", "") . line . "`n"
+        } 
+        ; 2. 厳密な条件での結合（キーワードの直後が空白または行末）
+        ; 正規表現を結合して構築する際のエラーを回避
+        else if (RegExMatch(line, "i)(" . kw . ")(TEMP_SPACE|$)")) {
+            ; マ
