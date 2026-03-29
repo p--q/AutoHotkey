@@ -1,11 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.5.0
-Description    : 処方箋整形（TEMP_SPACEによる数量前空白保護・WinAPI半角化）
-Author         : Gemini
-Created        : 2026-03-29
-Update         : 2026-03-29 - $$ を TEMP_SPACE に変更（エスケープミス防止）
+Version        : 1.6.0
+Description    : 処方箋整形（処理順序最適化：空白保護を最優先に実行）
+Update         : 2026-03-29 - cap->c 置換前に空白保護を行うよう順序変更
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -25,7 +23,6 @@ Hotkeys: Win + Alt + J
     if (originalText == "")
         return
 
-    ; 1. 全角を半角に変換（WinAPI使用）
     str := ToHalfWidth(originalText)
 
     lines := []
@@ -39,7 +36,6 @@ Hotkeys: Win + Alt + J
     if (lines.Length == 0)
         return
 
-    ; 2. 外来処方箋判定
     isOutpatient := false
     lastLine := lines[lines.Length]
     if (SubStr(lines[1], 1, 2) == "--" || SubStr(lines[1], 1, 2) == "<R" || (lines.Length >= 2 && SubStr(lines[2], 1, 2) == "<R") || RegExMatch(lastLine, "^処方箋使用期限"))
@@ -47,33 +43,30 @@ Hotkeys: Win + Alt + J
 
     Result := ""
     if (isOutpatient) {
-        ; --- 外来処方箋の処理 ---
         TempLines := []
         for line in lines {
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)"))
                 continue
             
+            ; 1. 数量前の空白保護（最優先）
+            if (RegExMatch(line, "[錠pﾄ枚g]$")) {
+                line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
+            }
+
+            ; 2. 各種名称・日数の整形
             if (RegExMatch(line, "i)cap$"))
                 line := RegExReplace(line, "i)cap$", "c")
             
             if (RegExMatch(line, "分$"))
                 line := RegExReplace(line, "\d+[^\d]*分$", "")
-
-            ; 【数量前の空白保護】
-            ; 単位で終わる行の「最後から1番目の空白」を TEMP_SPACE に退避
-            if (RegExMatch(line, "[錠pﾄ枚g]$")) {
-                line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
-            }
             
-            ; 不要な空白をすべて削除（TEMP_SPACEは残る）
+            ; 3. 余分な空白の削除
             line := RegExReplace(line, "\s+", "")
             
             if (line != "")
                 TempLines.Push(line)
         }
         Result := MergeMedicalLines(TempLines)
-        
-        ; 最後に TEMP_SPACE を半角空白に戻す
         Result := StrReplace(Result, "TEMP_SPACE", " ")
         
     } else {
@@ -128,11 +121,10 @@ Hotkeys: Win + Alt + J
     }
 
     A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver 1.5.0)")
+    ToolTip("処方整形完了 (Ver 1.6.0)")
     SetTimer(() => ToolTip(), -1000)
 }
 
-; --- サブ関数：分・時の結合ルール ---
 MergeMedicalLines(lineArray) {
     output := ""
     for line in lineArray {
@@ -150,7 +142,6 @@ MergeMedicalLines(lineArray) {
     return Trim(output, "`n")
 }
 
-; --- サブ関数：全角から半角へ ---
 ToHalfWidth(str) {
     size := DllCall("LCMapStringW", "UInt", 0x0411, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
