@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.27.0
-Description    : 処方箋整形（構文エラーを完全に解消した最終安定版）
-Update         : 2026-03-29 - 波括弧の対応を物理的に全行再検証
+Version        : 1.28.0
+Description    : 処方箋整形（波括弧ネスト構造の完全平坦化版）
+Update         : 2026-03-29 - 入院処方ループの波括弧エラーを物理的に排除
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -91,5 +91,8 @@ Hotkeys: Win + Alt + J
                 line := RegExReplace(line, "^(\(非持参\)|外\))", "")
                 line := RegExReplace(line, "\([^)]+として\)", "")
 
+                ; --- 次行結合ループ ---
                 while (i < blockLines.Length) {
-                    if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$"))
+                    if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$")) {
+                        break
+                    }
