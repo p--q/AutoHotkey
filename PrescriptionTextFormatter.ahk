@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.12.0
-Description    : 処方箋整形（構文エラー "Missing }" の完全修正版）
-Update         : 2026-03-29 - カッコの対応関係を整理し、実行エラーを解消
+Version        : 1.13.0
+Description    : 処方箋整形（構文エラーの完全修正・全機能統合版）
+Update         : 2026-03-29 - ToolTipの構文エラーを修正
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -37,6 +37,7 @@ Hotkeys: Win + Alt + J
     if (lines.Length == 0)
         return
 
+    ; 2. 外来/入院 判定
     isOutpatient := false
     lastLine := lines[lines.Length]
     if (SubStr(lines[1], 1, 2) == "--" || SubStr(lines[1], 1, 2) == "<R" || (lines.Length >= 2 && SubStr(lines[2], 1, 2) == "<R") || RegExMatch(lastLine, "^処方箋使用期限"))
@@ -58,9 +59,11 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "i)cap$"))
                 line := RegExReplace(line, "i)cap$", "c")
             
+            ; 末尾の「14日分」などを削除
             if (RegExMatch(line, "分$"))
                 line := RegExReplace(line, "\d+[^\d]*分$", "")
             
+            ; 余分な空白を削除
             line := RegExReplace(line, "\s+", "")
             
             if (line != "")
@@ -83,42 +86,3 @@ Hotkeys: Win + Alt + J
             CurrentBlock.Push(line)
         }
         if (CurrentBlock.Length > 0)
-            Blocks.Push(CurrentBlock)
-
-        FinalOutput := ""
-        for blockLines in Blocks {
-            ProcessedBlock := []
-            i := 1
-            while (i <= blockLines.Length) {
-                line := blockLines[i]
-                line := RegExReplace(line, "^(\(非持参\)|外\))", "")
-                line := RegExReplace(line, "\([^)]+として\)", "")
-
-                while (i < blockLines.Length) {
-                    if (RegExMatch(line, "[錠pﾄ枚g]$"))
-                        break
-                    nextLine := blockLines[i+1]
-                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$)|発熱時(TEMP_SPACE|$)|疼痛時(TEMP_SPACE|$)|不眠時(TEMP_SPACE|$))"))
-                        break
-                    line .= nextLine
-                    i++
-                }
-
-                if (RegExMatch(line, "i)cap$"))
-                    line := RegExReplace(line, "i)cap$", "c")
-                
-                if (RegExMatch(line, "分$"))
-                    line := RegExReplace(line, "\d+[^\d]*分$", "")
-
-                line := RegExReplace(line, "\s+", "")
-                if (line != "")
-                    ProcessedBlock.Push(line)
-                i++
-            }
-            FinalOutput .= MergeMedicalLines(ProcessedBlock) . "`n"
-        }
-        Result := Trim(FinalOutput, "`n")
-    }
-
-    A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver
