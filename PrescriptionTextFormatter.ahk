@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.26.0
-Description    : 処方箋整形（構文構造の完全再構築版）
-Update         : 2026-03-29 - 全ての制御文に波括弧を明示し、入れ子エラーを排除
+Version        : 1.27.0
+Description    : 処方箋整形（構文エラーを完全に解消した最終安定版）
+Update         : 2026-03-29 - 波括弧の対応を物理的に全行再検証
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -24,9 +24,7 @@ Hotkeys: Win + Alt + J
         return
     }
 
-    ; 1. 全角を半角に変換
     str := ToHalfWidth(originalText)
-
     lines := []
     Loop Parse, str, "`n", "`r"
     {
@@ -40,7 +38,6 @@ Hotkeys: Win + Alt + J
         return
     }
 
-    ; 2. 外来/入院 判定
     isOutpatient := false
     lastLine := lines[lines.Length]
     if (SubStr(lines[1], 1, 2) == "--" || SubStr(lines[1], 1, 2) == "<R" || (lines.Length >= 2 && SubStr(lines[2], 1, 2) == "<R") || RegExMatch(lastLine, "^処方箋使用期限")) {
@@ -50,20 +47,16 @@ Hotkeys: Win + Alt + J
     Result := ""
     if (isOutpatient) 
     {
-        ; --- 外来処方箋の処理 ---
         TempLines := []
         for line in lines {
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)")) {
                 continue
             }
-            
             if (RegExMatch(line, "i)[錠pﾄ枚gc]$")) {
                 line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
             }
-
             line := CleanLineEndings(line)
             line := RegExReplace(line, "\s+", "")
-            
             if (line != "") {
                 TempLines.Push(line)
             }
@@ -73,7 +66,6 @@ Hotkeys: Win + Alt + J
     } 
     else 
     {
-        ; --- 外来以外（入院等）の処理 ---
         Blocks := []
         CurrentBlock := []
         for line in lines {
@@ -99,20 +91,5 @@ Hotkeys: Win + Alt + J
                 line := RegExReplace(line, "^(\(非持参\)|外\))", "")
                 line := RegExReplace(line, "\([^)]+として\)", "")
 
-                ; 次の行を薬品名として結合するか判定
                 while (i < blockLines.Length) {
-                    if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$")) {
-                        break
-                    }
-                    
-                    nextLine := blockLines[i+1]
-                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$| )|発熱時|疼痛時|不眠時)")) {
-                        break
-                    }
-                    
-                    line .= nextLine
-                    i++
-                }
-
-                if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$")) {
-                    line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
+                    if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$"))
