@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.16.0
-Description    : 処方箋整形（構文エラー "151: {" の完全修正版）
-Update         : 2026-03-29 - MergeMedicalLines 内の波括弧の対応を完全に修正
+Version        : 1.17.0
+Description    : 処方箋整形（構文エラー "137: 分" の完全修正版）
+Update         : 2026-03-29 - MergeMedicalLines 内の引用符とカッコの対応を修正
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -47,6 +47,7 @@ Hotkeys: Win + Alt + J
     Result := ""
     if (isOutpatient) 
     {
+        ; --- 外来処方箋の処理 ---
         TempLines := []
         for line in lines {
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)"))
@@ -71,6 +72,7 @@ Hotkeys: Win + Alt + J
     } 
     else 
     {
+        ; --- 入院処方箋の処理 ---
         Blocks := []
         CurrentBlock := []
         for line in lines {
@@ -98,40 +100,3 @@ Hotkeys: Win + Alt + J
                     if (RegExMatch(line, "[錠pﾄ枚g]$"))
                         break
                     nextLine := blockLines[i+1]
-                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$| )|発熱時|疼痛時|不眠時)"))
-                        break
-                    line .= nextLine
-                    i++
-                }
-
-                if (RegExMatch(line, "[錠pﾄ枚g]$"))
-                    line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
-
-                if (RegExMatch(line, "i)cap$"))
-                    line := RegExReplace(line, "i)cap$", "c")
-                
-                if (RegExMatch(line, "分$"))
-                    line := RegExReplace(line, "\d+[^\d]*分$", "")
-
-                line := RegExReplace(line, "\s+", "")
-                if (line != "")
-                    ProcessedBlock.Push(line)
-                i++
-            }
-            FinalOutput .= MergeMedicalLines(ProcessedBlock) . "`n"
-        }
-        Result := StrReplace(Trim(FinalOutput, "`n"), "TEMP_SPACE", " ")
-    }
-
-    A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver 1.16.0)")
-    SetTimer(() => ToolTip(), -1000)
-}
-
-; --- サブ関数：行結合ルール ---
-MergeMedicalLines(lineArray) {
-    output := ""
-    kw := "発熱時|疼痛時|不眠時|頓用|の時|時"
-    
-    for line in lineArray {
-        if (SubStr(line, 1, 1) == "分
