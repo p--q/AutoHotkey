@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.17.0
-Description    : 処方箋整形（構文エラー "137: 分" の完全修正版）
-Update         : 2026-03-29 - MergeMedicalLines 内の引用符とカッコの対応を修正
+Version        : 1.18.0
+Description    : 処方箋整形（構文エラー "099: {" の完全修正版）
+Update         : 2026-03-29 - Whileループおよび入れ子構造の波括弧を完全に修正
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -96,7 +96,83 @@ Hotkeys: Win + Alt + J
                 line := RegExReplace(line, "^(\(非持参\)|外\))", "")
                 line := RegExReplace(line, "\([^)]+として\)", "")
 
+                ; 次の行を結合するかどうかの判定ループ
                 while (i < blockLines.Length) {
-                    if (RegExMatch(line, "[錠pﾄ枚g]$"))
+                    if (RegExMatch(line, "[錠pﾄ枚g]$")) {
                         break
+                    }
                     nextLine := blockLines[i+1]
+                    if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$| )|発熱時|疼痛時|不眠時)")) {
+                        break
+                    }
+                    line .= nextLine
+                    i++
+                }
+
+                ; 数量前の空白を退避
+                if (RegExMatch(line, "[錠pﾄ枚g]$")) {
+                    line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
+                }
+
+                if (RegExMatch(line, "i)cap$"))
+                    line := RegExReplace(line, "i)cap$", "c")
+                
+                if (RegExMatch(line, "分$"))
+                    line := RegExReplace(line, "\d+[^\d]*分$", "")
+
+                line := RegExReplace(line, "\s+", "")
+                if (line != "") {
+                    ProcessedBlock.Push(line)
+                }
+                i++
+            }
+            FinalOutput .= MergeMedicalLines(ProcessedBlock) . "`n"
+        }
+        Result := StrReplace(Trim(FinalOutput, "`n"), "TEMP_SPACE", " ")
+    }
+
+    ; 3. クリップボードへ出力
+    A_Clipboard := Result
+    ToolTip("処方整形完了 (Ver 1.18.0)")
+    SetTimer(() => ToolTip(), -1000)
+}
+
+; --- サブ関数：行結合ルール ---
+MergeMedicalLines(lineArray) {
+    output := ""
+    kw := "発熱時|疼痛時|不眠時|頓用|の時|時"
+    
+    for line in lineArray {
+        if (SubStr(line, 1, 1) == "分") {
+            line := StrReplace(line, "毎食後", "")
+            line := StrReplace(line, "食後", "")
+            line := StrReplace(line, "眠前", "寝")
+            output := RegExReplace(output, "\r?\n$", "") . line . "`n"
+        } 
+        else if (RegExMatch(line, "i)(" . kw . ")(TEMP_SPACE|$)")) {
+            if (RegExMatch(line, "i)^.*?(" . kw . ")(TEMP_SPACE|$)", &match)) {
+                matchedPart := match[0]
+                remainingPart := LTrim(SubStr(line, StrLen(matchedPart) + 1))
+                output := RegExReplace(output, "\r?\n$", "") . matchedPart . "`n"
+                if (remainingPart != "") {
+                    output .= remainingPart . "`n"
+                }
+            } else {
+                output .= line . "`n"
+            }
+        } 
+        else {
+            output .= line . "`n"
+        }
+    }
+    return Trim(output, "`n")
+}
+
+; --- サブ関数：全角から半角へ ---
+ToHalfWidth(str) {
+    size := DllCall("LCMapStringW", "UInt", 0x0411, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
+    buf := Buffer(size * 2)
+    DllCall("LCMapStringW", "UInt", 0x0411, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
+    result := StrGet(buf, "UTF-16")
+    return StrReplace(result, "　", " ")
+}
