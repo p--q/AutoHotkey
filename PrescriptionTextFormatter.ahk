@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.18.0
-Description    : 処方箋整形（構文エラー "099: {" の完全修正版）
-Update         : 2026-03-29 - Whileループおよび入れ子構造の波括弧を完全に修正
+Version        : 1.19.0
+Description    : 処方箋整形（入院処方の c 置換および結合条件の修正）
+Update         : 2026-03-29 - 入院処方の結合判定に "c" を追加
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -53,7 +53,8 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)"))
                 continue
             
-            if (RegExMatch(line, "[錠pﾄ枚g]$"))
+            ; 数量前の空白保護（capがcになる前なので p で判定）
+            if (RegExMatch(line, "i)[錠pﾄ枚gc]$"))
                 line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
 
             if (RegExMatch(line, "i)cap$"))
@@ -72,7 +73,7 @@ Hotkeys: Win + Alt + J
     } 
     else 
     {
-        ; --- 入院処方箋の処理 ---
+        ; --- 入院処方箋（外来以外）の処理 ---
         Blocks := []
         CurrentBlock := []
         for line in lines {
@@ -98,10 +99,12 @@ Hotkeys: Win + Alt + J
 
                 ; 次の行を結合するかどうかの判定ループ
                 while (i < blockLines.Length) {
-                    if (RegExMatch(line, "[錠pﾄ枚g]$")) {
+                    ; すでに単位（錠pﾄ枚gc）で終わっている、または cap で終わっているなら結合停止
+                    if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$")) {
                         break
                     }
                     nextLine := blockLines[i+1]
+                    ; 次の行が用法（分、時、発熱時など）で始まるなら結合停止
                     if (RegExMatch(nextLine, "^(分|.+時(TEMP_SPACE|$| )|発熱時|疼痛時|不眠時)")) {
                         break
                     }
@@ -109,11 +112,12 @@ Hotkeys: Win + Alt + J
                     i++
                 }
 
-                ; 数量前の空白を退避
-                if (RegExMatch(line, "[錠pﾄ枚g]$")) {
+                ; 【重要】空白を消す前に数量前の空白を退避（c, cap 両方に対応）
+                if (RegExMatch(line, "i)([錠pﾄ枚gc]|cap)$")) {
                     line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
                 }
 
+                ; cap -> c 置換
                 if (RegExMatch(line, "i)cap$"))
                     line := RegExReplace(line, "i)cap$", "c")
                 
@@ -133,7 +137,7 @@ Hotkeys: Win + Alt + J
 
     ; 3. クリップボードへ出力
     A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver 1.18.0)")
+    ToolTip("処方整形完了 (Ver 1.19.0)")
     SetTimer(() => ToolTip(), -1000)
 }
 
