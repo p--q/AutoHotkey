@@ -1,9 +1,9 @@
 /*
 ================================================================================
 Script Name    : PrescriptionTextFormatter.ahk
-Version        : 1.8.0
-Description    : 処方箋整形（頓用「発熱時」等の結合対応版）
-Update         : 2026-03-29 - 「発熱時」等の用法行を上の数量行と結合するよう修正
+Version        : 1.9.0
+Description    : 処方箋整形（用法キーワードで結合を止め、以降を別行にする修正）
+Update         : 2026-03-29 - 「発熱時」等で結合する際、その直後で改行を入れるよう修正
 --------------------------------------------------------------------------------
 Hotkeys: Win + Alt + J
 ================================================================================
@@ -48,7 +48,6 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "^(--|<R|処方箋使用期限)"))
                 continue
             
-            ; 数量前の空白保護
             if (RegExMatch(line, "[錠pﾄ枚g]$")) {
                 line := RegExReplace(line, "\s+(?=[^\s]+$)", "TEMP_SPACE")
             }
@@ -59,7 +58,6 @@ Hotkeys: Win + Alt + J
             if (RegExMatch(line, "分$"))
                 line := RegExReplace(line, "\d+[^\d]*分$", "")
             
-            ; TEMP_SPACE 以外の空白をすべて削除
             line := RegExReplace(line, "\s+", "")
             
             if (line != "")
@@ -97,7 +95,7 @@ Hotkeys: Win + Alt + J
                     if (RegExMatch(line, "[錠pﾄ枚g]$"))
                         break
                     nextLine := blockLines[i+1]
-                    if (RegExMatch(nextLine, "^(分|.+時|発熱時|疼痛時|不眠時)"))
+                    if (RegExMatch(nextLine, "^(分|.+時|発熱時|疼痛時|不眠時|の時)"))
                         break
                     line .= nextLine
                     i++
@@ -120,24 +118,40 @@ Hotkeys: Win + Alt + J
     }
 
     A_Clipboard := Result
-    ToolTip("処方整形完了 (Ver 1.8.0)")
+    ToolTip("処方整形完了 (Ver 1.9.0)")
     SetTimer(() => ToolTip(), -1000)
 }
 
 ; --- サブ関数：行結合ルール ---
 MergeMedicalLines(lineArray) {
     output := ""
+    keywords := "発熱時|疼痛時|不眠時|頓用|の時"
+    
     for line in lineArray {
-        ; 結合すべき行の判定（分、時、発熱時、疼痛時、不眠時など）
-        ; これらが現れたら直前の改行を消して結合する
-        if (RegExMatch(line, "^(分|.+時|発熱時|疼痛時|不眠時|頓用|の時)")) {
-            if (SubStr(line, 1, 1) == "分") {
-                line := StrReplace(line, "毎食後", "")
-                line := StrReplace(line, "食後", "")
-                line := StrReplace(line, "眠前", "寝")
-            }
-            ; 直前の改行を削除して結合
+        ; 1. 「分」から始まる行の処理
+        if (SubStr(line, 1, 1) == "分") {
+            line := StrReplace(line, "毎食後", "")
+            line := StrReplace(line, "食後", "")
+            line := StrReplace(line, "眠前", "寝")
             output := RegExReplace(output, "\r?\n$", "") . line . "`n"
+        } 
+        ; 2. 頓用キーワードや「時」を含む行の処理
+        else if (RegExMatch(line, "i)(" . keywords . "|時)")) {
+            ; キーワードにマッチした部分までを抽出し、それ以降は切り捨てる（改行として扱う）
+            ; 例：「発熱時1日2回」→「発熱時」を結合し、「1日2回」は新しい行へ
+            if (RegExMatch(line, "i)^.*?(?:" . keywords . "|時)", &match)) {
+                matchedPart := match[0]
+                remainingPart := LTrim(SubStr(line, StrLen(matchedPart) + 1))
+                
+                ; キーワードまでを上の行に結合
+                output := RegExReplace(output, "\r?\n$", "") . matchedPart . "`n"
+                
+                ; 残りがあれば新しい行として追加
+                if (remainingPart != "")
+                    output .= remainingPart . "`n"
+            } else {
+                output .= line . "`n"
+            }
         } 
         else {
             output .= line . "`n"
