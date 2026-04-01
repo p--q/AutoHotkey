@@ -231,11 +231,7 @@ ProcessBun1to3Yohou(text) {
             line := RegExReplace(line, "食後")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
-            line := RegExReplace(line, "
-
-\[食間\]
-
-")
+            line := RegExReplace(line, "\[食間\]")
             line := RegExReplace(line, "1日\d回")
 
             if new.Length
@@ -258,11 +254,7 @@ ProcessBunAnyYohou(text) {
     for line in StrSplit(text, "`n") {
         if RegExMatch(line, "^分\d\S+") {
             line := RegExReplace(line, "(?:と)?眠前", "寝")
-            line := RegExReplace(line, "
-
-\[食間\]
-
-")
+            line := RegExReplace(line, "\[食間\]")
             line := RegExReplace(line, "1日\d回")
 
             if new.Length
