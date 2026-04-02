@@ -1,14 +1,11 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v4.1.ahk
-; Version: 4.1
-; Description: 処方整形スクリプト (AHK v2) - 構文エラー修正版
+; File: PrescriptionFormatter_v4.2.ahk
+; Version: 4.2
+; Description: 処方整形スクリプト (AHK v2) - 「時」のみの行を完全結合
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
 
-; ------------------------------------------------------------------------------
-; Win + Alt + S : 用法なし出力
-; ------------------------------------------------------------------------------
 #!s:: {
     text := ProcessInitialInput()
     if (RegExMatch(text, "^商品名")) {
@@ -37,9 +34,6 @@
     SetTimer(() => ToolTip(), -2000)
 }
 
-; ------------------------------------------------------------------------------
-; Win + Alt + D : 用法あり出力
-; ------------------------------------------------------------------------------
 #!d:: {
     text := ProcessInitialInput()
     if (SubStr(text, 1, 2) == "--") {
@@ -59,6 +53,7 @@
         if (line == "")
             continue
 
+        ; 用法としてマージすべきパターンの判定
         if (RegExMatch(line, "^(分\d|1日\d回|\d回分)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
@@ -84,9 +79,7 @@
     SetTimer(() => ToolTip(), -2000)
 }
 
-; ------------------------------------------------------------------------------
-; 関数群
-; ------------------------------------------------------------------------------
+; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
@@ -102,16 +95,13 @@ MergeSpecificPatterns(text) {
         if (line == "")
             continue
 
-        if (RegExMatch(line, "^(\S+?時)(.*)$", &m)) {
+        ; 【修正ポイント】
+        ; 行全体が「時」で終わっている（後ろに文字がない）場合のみ上の行に結合
+        if (RegExMatch(line, "^\S+時$")) {
             if (result.Length > 0)
-                result[result.Length] .= m[1]
+                result[result.Length] .= line
             else
-                result.Push(m[1])
-            
-            remaining := Trim(m[2])
-            if (remaining != "")
-                result.Push(remaining)
-
+                result.Push(line)
         } else if (RegExMatch(line, "^分\d+\s\d")) {
             line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
             result.Push(line)
