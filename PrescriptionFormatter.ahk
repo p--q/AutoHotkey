@@ -1,140 +1,12 @@
-; ==============================================================================
-; File: PrescriptionFormatter.ahk
-; Version: 1.0
-; Description: 処方オーダーのテキストを整形し、DI情報や用法を整理して
-;              クリップボードに再格納するスクリプト。
-; ==============================================================================
-
-#Requires AutoHotkey v2.0
-
-; ------------------------------------------------------------------------------
-; Win + Alt + S : 出力に用法がない（DI情報または薬品名のみの抽出）
-; ------------------------------------------------------------------------------
-#!s:: {
-    text := ProcessInitialInput() ; 関数E相当
-    
-    if (RegExMatch(text, "^商品名")) {
-        ; DI情報の処理
-        text := RegExReplace(text, "^商品名\s*", "")
-    } else {
-        ; 薬品名抽出処理
-        text := ReorganizePrescriptionLines(text) ; 関数D
-        
-        lines := StrSplit(text, "`n", "`r")
-        result := ""
-        for line in lines {
-            if (RegExMatch(line, "\d+\S*[錠pg枚ﾄ]$")) {
-                line := RegExReplace(line, "(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
-                line := RegExReplace(line, "cap$", "c")
-                result .= line "`n"
-            }
-        }
-        text := result
-        text := RegExReplace(text, "[ \t]+", "") ; 改行以外の空白削除
-    }
-    
-    FinalizeClipboard(text)
-}
-
-; ------------------------------------------------------------------------------
-; Win + Alt + D : 出力に用法がある
-; ------------------------------------------------------------------------------
-#!d:: {
-    text := ProcessInitialInput() ; 関数E
-    text := FilterOrderType(text)  ; 関数G
-    text := ApplyPrescriptionFormatting(text) ; 関数A
-    text := MergeSpecificPatterns(text) ; 関数F
-    
-    text := RegExReplace(text, "[ \t]+", "") ; 改行以外の空白削除
-    
-    ; 用法置換処理 (関数B / 関数C 相当)
-    lines := StrSplit(text, "`n", "`r")
-    processedLines := []
-    
-    loop lines.Length {
-        line := lines[A_Index]
-        if (RegExMatch(line, "^分[123]\S+")) {
-            ; 関数Bの処理
-            line := RegExReplace(line, "毎(?=.)|食後", "")
-            line := RegExReplace(line, "(?:と)?眠前", "寝")
-            line := RegExReplace(line, "食前", "前")
-            line := RegExReplace(line, "\[食間\]", "")
-            line := RegExReplace(line, "1日\d回", "")
-            ; 前の行と結合（配列の最後を書き換え）
-            if (processedLines.Length > 0)
-                processedLines[processedLines.Length] .= line
-            else
-                processedLines.Push(line)
-        }
-        else if (RegExMatch(line, "^分\d\S+")) {
-            ; 関数Cの処理
-            line := RegExReplace(line, "(?:と)?眠前", "寝")
-            line := RegExReplace(line, "\[食間\]", "")
-            line := RegExReplace(line, "1日\d回", "")
-            ; 前の行と結合
-            if (processedLines.Length > 0)
-                processedLines[processedLines.Length] .= line
-            else
-                processedLines.Push(line)
-        } else {
-            processedLines.Push(line)
-        }
-    }
-    
-    ; 配列を文字列に戻す
-    text := ""
-    for line in processedLines
-        text .= line "`n"
-        
-    FinalizeClipboard(text)
-}
-
-; ------------------------------------------------------------------------------
-; 各機能関数
-; ------------------------------------------------------------------------------
-
-; 関数E: 選択範囲の取得と全角半角変換
-ProcessInitialInput() {
-    A_Clipboard := ""
-    Send("^c")
-    if !ClipWait(0.5) {
-        ; 選択範囲がなければ現在のクリップボードを使用
-    }
-    input := A_Clipboard
-    ; 全角から半角へ変換 (英数字・記号)
-    return StrConvert(input, "H") 
-}
-
-; 関数G: オーダー種別の判別とフィルタリング
-FilterOrderType(text) {
-    if (SubStr(text, 1, 2) == "--") {
-        ; 外来処方
-        lines := StrSplit(text, "`n", "`r")
-        result := ""
-        for line in lines {
-            if (line == "" || RegExMatch(line, "^(--|<R|処方箋)"))
-                continue
-            result .= line "`n"
-        }
-        return result
-    } else if (RegExMatch(text, "^処方日")) {
-        ; 入院処方
-        text := ReorganizePrescriptionLines(text) ; 関数D
-        text := RegExReplace(text, "m)^処方日.*`n?", "")
-        return text
-    }
-    return text
-}
-
 ; 関数D: 処方行の再構成
-; トリガー行（スペースあり）を見つけるまで、スペースなし行を結合し続ける
 ReorganizePrescriptionLines(text) {
     lines := StrSplit(text, "`n", "`r")
     newOutput := ""
     buffer := ""
     
     for line in lines {
-        if (line == "") continue
+        if (line == "") 
+            continue ; 改行して記述することで予約語として正しく認識されます
         
         if (InStr(line, " ")) { ; トリガー行
             newOutput .= buffer . line . "`n"
@@ -146,21 +18,34 @@ ReorganizePrescriptionLines(text) {
     return newOutput . buffer
 }
 
-; 関数A: 基本的な薬品単位の整形
-ApplyPrescriptionFormatting(text) {
-    text := RegExReplace(text, "\d+\S*分$", "")
-    text := RegExReplace(text, "(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
-    text := RegExReplace(text, "cap$", "c")
+; 関数G内も同様に修正
+FilterOrderType(text) {
+    if (SubStr(text, 1, 2) == "--") {
+        lines := StrSplit(text, "`n", "`r")
+        result := ""
+        for line in lines {
+            ; 複数条件のif文でも同様に改行してcontinue
+            if (line == "" || RegExMatch(line, "^(--|<R|処方箋)"))
+                continue
+            result .= line "`n"
+        }
+        return result
+    } else if (RegExMatch(text, "^処方日")) {
+        text := ReorganizePrescriptionLines(text)
+        text := RegExReplace(text, "m)^処方日.*`n?", "")
+        return text
+    }
     return text
 }
 
-; 関数F: 行の結合と特定パターンの置換
+; 関数F内も同様に修正
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
     
     for line in lines {
-        if (line == "") continue
+        if (line == "")
+            continue
         
         if (RegExMatch(line, "^\S+時")) {
             if (result.Length > 0)
@@ -187,33 +72,4 @@ MergeSpecificPatterns(text) {
     for l in result
         finalText .= l "`n"
     return finalText
-}
-
-; 共通の最終処理: 特殊文字の置換とクリーンアップ
-FinalizeClipboard(text) {
-    text := StrReplace(text, "@@SPACE@@", " ")
-    text := RegExReplace(text, "\(\Sとして\)", "")
-    text := Trim(text, "`n`r ")
-    A_Clipboard := text
-    ToolTip("整形完了")
-    SetTimer(() => ToolTip(), -2000)
-}
-
-; 全角・半角変換補助関数
-StrConvert(str, mode) {
-    ; v2にはStrConvがないため、簡単な変換処理
-    static diff := 0xFEE0
-    result := ""
-    loop parse, str {
-        charAlt := Ord(A_LoopField)
-        if (mode = "H") { ; 全角から半角
-            if (charAlt >= 0xFF01 && charAlt <= 0xFF5E)
-                result .= Chr(charAlt - diff)
-            else if (charAlt = 0x3000) ; 全角スペース
-                result .= Chr(0x0020)
-            else
-                result .= A_LoopField
-        }
-    }
-    return result
 }
