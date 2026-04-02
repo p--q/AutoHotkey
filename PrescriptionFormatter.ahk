@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v3.3.ahk
-; Version: 3.3
-; Description: 処方整形スクリプト (AHK v2) - 正規表現オプション修正版
+; File: PrescriptionFormatter_v3.4.ahk
+; Version: 3.4
+; Description: 処方整形スクリプト (AHK v2) - 頓服用法(発熱時等)の結合対応版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -151,7 +151,6 @@ ReorganizeByTrigger(text) {
 }
 
 ApplyBasicFormatting(text) {
-    ; オプション記述を修正しました
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
@@ -166,22 +165,35 @@ MergeSpecificPatterns(text) {
         if (line == "")
             continue
         
-        if (RegExMatch(line, "^\S+時")) {
-            if (result.Length > 0)
-                result[result.Length] .= line
-            else
-                result.Push(line)
+        ; 「発熱時」などにマッチする部分を抽出
+        if (RegExMatch(line, "^(\S+時)(.*)$", &m)) {
+            ; 1. 「発熱時」の部分を上の行に結合
+            if (result.Length > 0) {
+                result[result.Length] .= m[1]
+            } else {
+                result.Push(m[1])
+            }
+            ; 2. その行に続き（例：「1日3回まで」）があれば新しい行として追加
+            remaining := Trim(m[2])
+            if (remaining != "") {
+                result.Push(remaining)
+            }
+            
         } else if (RegExMatch(line, "^分\d+\s\d")) {
             line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
             result.Push(line)
-        } else if (RegExMatch(line, "^外\)\s")) {
-            line := RegExReplace(line, "^外\)\s", "@@SPACE@@")
-            if (result.Length > 0)
-                result[result.Length] .= line
-            else
-                result.Push(line)
+            
+        } else if (RegExMatch(line, "^外\)\s(.*)$", &m)) {
+            ; 外\) を @@SPACE@@ に置換して上の行に結合
+            if (result.Length > 0) {
+                result[result.Length] .= "@@SPACE@@" . m[1]
+            } else {
+                result.Push("@@SPACE@@" . m[1])
+            }
+            
         } else if (RegExMatch(line, "^吸入用")) {
             result.Push(RegExReplace(line, "^吸入用", ""))
+            
         } else {
             result.Push(line)
         }
