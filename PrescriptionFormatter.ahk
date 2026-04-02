@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v4.2.ahk
-; Version: 4.2
-; Description: 処方整形スクリプト (AHK v2) - 「時」のみの行を完全結合
+; File: PrescriptionFormatter_v4.3.ahk
+; Version: 4.3
+; Description: 処方整形スクリプト (AHK v2) - 頓服指示・回数制限維持版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -43,6 +43,7 @@
     }
     
     text := ApplyBasicFormatting(text)
+    ; ここで「発熱時」を分離し、残りを次行に送る
     text := MergeSpecificPatterns(text)
     text := RegExReplace(text, "[ \t]+", "")
     
@@ -55,11 +56,11 @@
 
         ; 用法としてマージすべきパターンの判定
         if (RegExMatch(line, "^(分\d|1日\d回|\d回分)")) {
+            ; 表記の簡略化（ただし「1日3回」などは消さない）
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
             line := RegExReplace(line, "\[食間\]", "")
-            line := RegExReplace(line, "1日\d回", "")
             
             if (processedLines.Length > 0)
                 processedLines[processedLines.Length] .= line
@@ -95,13 +96,18 @@ MergeSpecificPatterns(text) {
         if (line == "")
             continue
 
-        ; 【修正ポイント】
-        ; 行全体が「時」で終わっている（後ろに文字がない）場合のみ上の行に結合
-        if (RegExMatch(line, "^\S+時$")) {
+        ; 非強欲マッチで、行の最初にある「時」までを抽出
+        if (RegExMatch(line, "^(\S+?時)(.*)$", &m)) {
+            ; 1. 「発熱時」を上の薬品行にマージ
             if (result.Length > 0)
-                result[result.Length] .= line
+                result[result.Length] .= m[1]
             else
-                result.Push(line)
+                result.Push(m[1])
+            
+            ; 2. 残りのテキスト（「1日3回まで。頭痛...」）を独立した行として保持
+            remaining := Trim(m[2])
+            if (remaining != "")
+                result.Push(remaining)
         } else if (RegExMatch(line, "^分\d+\s\d")) {
             line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
             result.Push(line)
