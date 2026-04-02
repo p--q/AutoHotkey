@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v3.5.ahk
-; Version: 3.5
-; Description: 処方整形スクリプト (AHK v2) - 頓服用法(発熱時 等)の抽出条件修正
+; File: PrescriptionFormatter_v3.6.ahk
+; Version: 3.6
+; Description: 処方整形スクリプト (AHK v2) - 頓服結合のロジック修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -51,9 +51,11 @@
         text := ReorganizeByTrigger(text)
     }
     
+    ; 重要：空白削除の前に、まず結合・基本整形を行う
     text := ApplyBasicFormatting(text)
     text := MergeSpecificPatterns(text)
     
+    ; ここで改行以外の空白を削除
     text := RegExReplace(text, "[ \t]+", "")
     
     lines := StrSplit(text, "`n", "`r")
@@ -165,34 +167,28 @@ MergeSpecificPatterns(text) {
         if (line == "")
             continue
         
-        ; 修正：^\S+時\s に変更。時＋空白にマッチさせ、残りを分離
-        if (RegExMatch(line, "^(\S+時)\s+(.*)$", &m)) {
-            ; 1. 「発熱時」の部分を上の行に結合
+        ; 空白の有無に関わらず「時」で終わる単語をマッチさせるように修正
+        if (RegExMatch(line, "^(\S+時)(.*)$", &m)) {
             if (result.Length > 0) {
                 result[result.Length] .= m[1]
             } else {
                 result.Push(m[1])
             }
-            ; 2. 空白の後の残り（例：「1日3回まで」）を新しい行として追加
             remaining := Trim(m[2])
             if (remaining != "") {
                 result.Push(remaining)
             }
-            
         } else if (RegExMatch(line, "^分\d+\s\d")) {
             line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
             result.Push(line)
-            
         } else if (RegExMatch(line, "^外\)\s(.*)$", &m)) {
             if (result.Length > 0) {
                 result[result.Length] .= "@@SPACE@@" . m[1]
             } else {
                 result.Push("@@SPACE@@" . m[1])
             }
-            
         } else if (RegExMatch(line, "^吸入用")) {
             result.Push(RegExReplace(line, "^吸入用", ""))
-            
         } else {
             result.Push(line)
         }
