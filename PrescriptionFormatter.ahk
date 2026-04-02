@@ -1,27 +1,26 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v3.7.ahk
-; Version: 3.7
-; Description: 処方整形スクリプト (AHK v2) - 非強欲マッチ採用・最終版
+; File: PrescriptionFormatter_v3.8.ahk
+; Version: 3.8
+; Description: 処方整形スクリプト (AHK v2) - 変数誤認エラー修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
 
-; ------------------------------------------------------------------------------
-; Win + Alt + S : 用法なし出力
-; ------------------------------------------------------------------------------
+; --- ホットキーの設定 ---
+
 #!s:: {
-    text := ProcessInitialInput() ; 関数E相当
+    global
+    local text, lines, result, line
+    text := ProcessInitialInput()
     
     if (RegExMatch(text, "^商品名")) {
-        ; DI情報の処理
         text := RegExReplace(text, "^商品名\s*", "")
         text := FinalizeText(text)
         A_Clipboard := text
         ToolTip("整形完了(用法錠数なし)")
     } else {
-        ; 入院処方オーダー判定
         if (RegExMatch(text, "^処方日")) {
-            text := ReorganizeByTrigger(text) ; 関数D相当
+            text := ReorganizeByTrigger(text)
         }
         
         lines := StrSplit(text, "`n", "`r")
@@ -33,7 +32,7 @@
                 result .= line "`n"
             }
         }
-        text := RegExReplace(result, "[ \t]+", "") ; 改行以外の空白削除
+        text := RegExReplace(result, "[ \t]+", "")
         text := FinalizeText(text)
         A_Clipboard := text
         ToolTip("整形完了(用法なし)")
@@ -41,23 +40,22 @@
     SetTimer(() => ToolTip(), -2000)
 }
 
-; ------------------------------------------------------------------------------
-; Win + Alt + D : 用法あり出力
-; ------------------------------------------------------------------------------
 #!d:: {
-    text := ProcessInitialInput() ; 関数E相当
+    global ; 関数をグローバルスコープから確実に参照するため
+    local text, lines, line, processedLines
+    
+    text := ProcessInitialInput()
     
     if (SubStr(text, 1, 2) == "--") {
-        text := FilterOutpatientOrder(text) ; 関数G相当
+        text := FilterOutpatientOrder(text)
     } else if (RegExMatch(text, "^処方日")) {
-        text := ReorganizeByTrigger(text) ; 関数D相当
+        text := ReorganizeByTrigger(text)
     }
     
-    ; 基本整形と特殊パターンの結合（空白削除の前に行う）
-    text := ApplyBasicFormatting(text) ; 関数A相当
-    text := MergeSpecificPatterns(text) ; 関数F相当
+    ; ここでエラーが出ていた箇所の呼び出しを確実に
+    text := ApplyBasicFormatting(text)
+    text := MergeSpecificPatterns(text)
     
-    ; 改行を除くすべての空白を削除
     text := RegExReplace(text, "[ \t]+", "")
     
     lines := StrSplit(text, "`n", "`r")
@@ -66,7 +64,6 @@
     loop lines.Length {
         line := lines[A_Index]
         if (RegExMatch(line, "^分[123]\S+")) {
-            ; 関数B相当
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
@@ -78,7 +75,6 @@
                 processedLines.Push(line)
         }
         else if (RegExMatch(line, "^分\d\S+")) {
-            ; 関数C相当
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "\[食間\]", "")
             line := RegExReplace(line, "1日\d回", "")
@@ -102,11 +98,49 @@
     SetTimer(() => ToolTip(), -2000)
 }
 
-; ------------------------------------------------------------------------------
-; サポート関数群
-; ------------------------------------------------------------------------------
+; --- 関数定義 (定義を明確にする) ---
 
-; 関数H相当: 特殊マーカーの復元と最終クリーンアップ
+ApplyBasicFormatting(text) {
+    text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
+    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
+    text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
+    return text
+}
+
+MergeSpecificPatterns(text) {
+    lines := StrSplit(text, "`n", "`r")
+    result := []
+    for line in lines {
+        if (line == "")
+            continue
+        if (RegExMatch(line, "^(\S+?時)(.*)$", &m)) {
+            if (result.Length > 0)
+                result[result.Length] .= m[1]
+            else
+                result.Push(m[1])
+            remaining := Trim(m[2])
+            if (remaining != "")
+                result.Push(remaining)
+        } else if (RegExMatch(line, "^分\d+\s\d")) {
+            line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
+            result.Push(line)
+        } else if (RegExMatch(line, "^外\)\s(.*)$", &m)) {
+            if (result.Length > 0)
+                result[result.Length] .= "@@SPACE@@" . m[1]
+            else
+                result.Push("@@SPACE@@" . m[1])
+        } else if (RegExMatch(line, "^吸入用")) {
+            result.Push(RegExReplace(line, "^吸入用", ""))
+        } else {
+            result.Push(line)
+        }
+    }
+    finalText := ""
+    for l in result
+        finalText .= l "`n"
+    return finalText
+}
+
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     text := RegExReplace(text, "\(\Sとして\)", "")
@@ -114,7 +148,6 @@ FinalizeText(text) {
     return Trim(text, "`n`r")
 }
 
-; 関数G相当: 外来処方オーダーの不要行削除
 FilterOutpatientOrder(text) {
     lines := StrSplit(text, "`n", "`r")
     result := ""
@@ -126,7 +159,6 @@ FilterOutpatientOrder(text) {
     return result
 }
 
-; 関数E相当: 選択範囲のコピーと全角半角変換
 ProcessInitialInput() {
     savedClip := A_Clipboard
     A_Clipboard := ""
@@ -137,16 +169,13 @@ ProcessInitialInput() {
     return ConvertToHalfWidth(A_Clipboard)
 }
 
-; 関数D相当: 入院処方の再構成（トリガー行による結合）
 ReorganizeByTrigger(text) {
     lines := StrSplit(text, "`n", "`r")
     newOutput := ""
     buffer := ""
-    
     for line in lines {
         if (RegExMatch(line, "^処方日") || line == "")
             continue
-        
         if (RegExMatch(line, "\d+\S*[錠pg枚ﾄ]$")) {
             newOutput .= buffer . line . "`n"
             buffer := ""
@@ -160,4 +189,9 @@ ReorganizeByTrigger(text) {
     return newOutput . buffer
 }
 
-; 関数A相当: 基本単位整形（マルチラインオプション適用
+ConvertToHalfWidth(str) {
+    size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
+    buf := Buffer(size * 2)
+    DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
+    return StrGet(buf, "UTF-16")
+}
