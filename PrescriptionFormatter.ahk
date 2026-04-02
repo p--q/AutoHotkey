@@ -1,8 +1,9 @@
 /*
  * File: PrescriptionFormatter.ahk
- * Version: 1.3
- * Description: 処方オーダーおよび薬品DI情報のテキストを整形し、
- * 特定の規則に基づいた用法省略記号への置換や不要行の削除を行います。
+ * Version: 1.5
+ * Description: 処方オーダーおよび薬品DI情報のテキストを整形します。
+ * スペース（全角・半角・タブ）は削除しますが、改行は維持します。
+ * 外来処方の削除対象に「処方箋」から始まる行を含めます。
  */
 
 #Requires AutoHotkey v2.0
@@ -14,12 +15,9 @@
 #!s:: {
     text := GetTextAndConvertToHalfWidth()
     
-    ; Determine if it's DI information
     if (RegExMatch(text, "m)^商品名")) {
-        ; DI Info: Remove "商品名" and following spaces
-        text := RegExReplace(text, "m)^商品名\s*", "")
+        text := RegExReplace(text, "m)^商品名[ 　\t]*", "")
     } else {
-        ; Standard Process
         text := RegExReplace(text, "m)^分[123]\S+", "")
         text := RegExReplace(text, "m)^外\)", "")
         text := RegExReplace(text, "m)^吸入用", "")
@@ -28,14 +26,14 @@
         text := RemoveLinesByPrescriptionType(text)
         text := InsertSpaceBeforeUnitAndReplace(text)
         
-        ; Remove all whitespace (including newlines)
-        text := RegExReplace(text, "\s+", "")
-        ; Replace placeholder with a half-width space
+        ; 改行以外の空白（半角・全角・タブ）をすべて削除
+        text := RegExReplace(text, "[ 　\t]+", "")
+        ; 保存しておいたスペースマーカーを半角スペースに戻す
         text := StrReplace(text, "@@SPACE@@", " ")
     }
     
     text := RegExReplace(text, "\(\Sとして\)", "")
-    A_Clipboard := text
+    A_Clipboard := Trim(text, "`r`n")
     ShowNotification("Formatted (No Usage)")
 }
 
@@ -48,10 +46,9 @@
     text := InsertSpaceBeforeUnitAndReplace(text)
     text := CombineUsageLinesAndRemoveSpecificWords(text)
     
-    ; Remove all whitespace
-    text := RegExReplace(text, "\s+", "")
+    ; 改行以外の空白（半角・全角・タブ）をすべて削除
+    text := RegExReplace(text, "[ 　\t]+", "")
     
-    ; Process line by line for usage abbreviation
     lines := StrSplit(text, "`n", "`r")
     processedText := ""
     for line in lines {
@@ -59,19 +56,20 @@
             continue
         }
         
-        if (RegExMatch(line, "^分[123]\S+")) {
-            processedText .= AbbreviateUsagePatternB(line)
-        } else if (RegExMatch(line, "^分\d\S+")) {
-            processedText .= AbbreviateUsagePatternC(line)
-        } else {
-            processedText .= line
+        currentLine := line
+        if (RegExMatch(currentLine, "^分[123]\S+")) {
+            currentLine := AbbreviateUsagePatternB(currentLine)
+        } else if (RegExMatch(currentLine, "^分\d\S+")) {
+            currentLine := AbbreviateUsagePatternC(currentLine)
         }
+        ; 各行の末尾に改行を付与して結合
+        processedText .= currentLine "`r`n"
     }
     
     text := StrReplace(processedText, "@@SPACE@@", " ")
     text := RegExReplace(text, "\(\Sとして\)", "")
     
-    A_Clipboard := text
+    A_Clipboard := Trim(text, "`r`n")
     ShowNotification("Formatted (With Usage)")
 }
 
@@ -79,7 +77,6 @@
 ; Sub-functions
 ; ------------------------------------------------------------------
 
-; Corresponds to FuncE: Copy and Convert to Half-width
 GetTextAndConvertToHalfWidth() {
     oldClip := A_Clipboard
     A_Clipboard := ""
@@ -90,7 +87,6 @@ GetTextAndConvertToHalfWidth() {
     return ConvertFullToHalf(A_Clipboard)
 }
 
-; Convert Katakana, Numbers, and Alphabets using Windows API
 ConvertFullToHalf(str) {
     if (str == "") {
         return ""
@@ -102,7 +98,6 @@ ConvertFullToHalf(str) {
     return StrGet(buf)
 }
 
-; Corresponds to FuncG: Filter lines based on order type
 RemoveLinesByPrescriptionType(text) {
     lines := StrSplit(text, "`n", "`r")
     if (lines.Length == 0) {
@@ -113,7 +108,8 @@ RemoveLinesByPrescriptionType(text) {
         ; Outpatient Order
         result := ""
         for line in lines {
-            if (RegExMatch(line, "^(--|<R|処方箋期限)") || line == "") {
+            ; 修正箇所: 「処方箋」から始まる行も削除対象とする
+            if (RegExMatch(line, "^(--|<R|処方箋)") || line == "") {
                 continue
             }
             result .= line "`n"
@@ -127,7 +123,6 @@ RemoveLinesByPrescriptionType(text) {
     return text
 }
 
-; Corresponds to FuncD: Specific combination logic for Inpatient Orders
 CombineInpatientOrderLines(text) {
     sections := []
     currentSection := ""
@@ -158,10 +153,10 @@ CombineInpatientOrderLines(text) {
                 combinedSec .= sLine "`n"
                 continue
             }
-            if (InStr(sLine, " ")) { ; Trigger line (contains space)
+            if (InStr(sLine, " ")) { 
                 combinedSec .= buffer . sLine "`n"
                 buffer := ""
-            } else { ; Continuous lines without space
+            } else { 
                 buffer .= sLine
             }
         }
@@ -170,7 +165,6 @@ CombineInpatientOrderLines(text) {
     return finalResult
 }
 
-; Corresponds to FuncA
 InsertSpaceBeforeUnitAndReplace(text) {
     text := RegExReplace(text, "m)\d+\S+分$", "")
     ; Insert placeholder before units
@@ -179,7 +173,6 @@ InsertSpaceBeforeUnitAndReplace(text) {
     return text
 }
 
-; Corresponds to FuncF
 CombineUsageLinesAndRemoveSpecificWords(text) {
     lines := StrSplit(text, "`n", "`r")
     newLines := []
@@ -187,7 +180,7 @@ CombineUsageLinesAndRemoveSpecificWords(text) {
         if (line == "") {
             continue
         }
-        ; Combine lines starting with "time" to the previous line
+        ; Combine lines starting with something like "time" to the previous line
         if (RegExMatch(line, "^\S+時") && newLines.Length > 0) {
             newLines[newLines.Length] .= line
         } else {
@@ -200,7 +193,7 @@ CombineUsageLinesAndRemoveSpecificWords(text) {
         line := RegExReplace(line, "^分(\d+)\s(\d)", "分$1@@SPACE@@$2")
         if (RegExMatch(line, "^外\)")) {
             line := StrReplace(line, "外)", "@@SPACE@@")
-            res := RegExReplace(res, "\R$", "") . line ; Combine to previous
+            res := RegExReplace(res, "\R$", "") . line 
             continue
         }
         line := StrReplace(line, "吸入用", "")
@@ -209,7 +202,6 @@ CombineUsageLinesAndRemoveSpecificWords(text) {
     return res
 }
 
-; Corresponds to FuncB
 AbbreviateUsagePatternB(line) {
     line := RegExReplace(line, "毎(?=.)", "")
     line := StrReplace(line, "食後", "")
@@ -220,7 +212,6 @@ AbbreviateUsagePatternB(line) {
     return line
 }
 
-; Corresponds to FuncC
 AbbreviateUsagePatternC(line) {
     line := RegExReplace(line, "(と)?眠前", "寝")
     line := StrReplace(line, "[食間]", "")
