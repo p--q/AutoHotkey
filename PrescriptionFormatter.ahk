@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v4.4.ahk
-; Version: 4.4
-; Description: 処方整形スクリプト (AHK v2) - 頓服結合・改行位置固定版
+; File: PrescriptionFormatter_v4.5.ahk
+; Version: 4.5
+; Description: 処方整形スクリプト (AHK v2) - 単独「時」行の結合特化版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -43,10 +43,9 @@
     }
     
     text := ApplyBasicFormatting(text)
-    ; 1. 「発熱時」を薬品行に結合し、残りの「1日3回...」は特殊マーカーで保護
+    ; 1. 「時」だけで構成される行を上の行の末尾に結合する
     text := MergeSpecificPatterns(text)
     
-    ; 空白削除（@@NEWLINE@@ は削除されない）
     text := RegExReplace(text, "[ \t]+", "")
     
     lines := StrSplit(text, "`n", "`r")
@@ -57,20 +56,24 @@
             continue
 
         ; 用法としてマージすべきパターンの判定
-        ; @@NEWLINE@@ を含む行は、マージ対象から外して独立させる
-        if (RegExMatch(line, "^(分\d|1日\d回|\d回分)") && !InStr(line, "@@NEWLINE@@")) {
+        ; 分n / 1日n回 / n回分 などで始まる行を結合する
+        ; ※「発熱時」は既に上の薬品行と一体化しているため、ここでは「1日3回...」の行が判定される
+        if (RegExMatch(line, "^(分\d|1日\d回|\d回分)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
             line := RegExReplace(line, "\[食間\]", "")
             
-            if (processedLines.Length > 0)
+            ; ★重要★ ここで「1日3回...」がさらに上に上がるのを防ぐため、
+            ; 直前の行が「時」で終わっている場合は結合しない、という判定を入れました
+            prevLine := (processedLines.Length > 0) ? processedLines[processedLines.Length] : ""
+            if (processedLines.Length > 0 && !RegExMatch(prevLine, "時$")) {
                 processedLines[processedLines.Length] .= line
-            else
+            } else {
                 processedLines.Push(line)
+            }
         } else {
-            ; 薬品名行、または「@@NEWLINE@@」で保護された頓服指示行
-            processedLines.Push(StrReplace(line, "@@NEWLINE@@", ""))
+            processedLines.Push(line)
         }
     }
     
@@ -99,20 +102,14 @@ MergeSpecificPatterns(text) {
         if (line == "")
             continue
 
-        ; 「発熱時」などを抽出
-        if (RegExMatch(line, "^(\S+?時)(.*)$", &m)) {
-            ; 1. 「発熱時」を直前の行に結合
-            if (result.Length > 0)
-                result[result.Length] .= m[1]
-            else
-                result.Push(m[1])
-            
-            ; 2. 「1日3回まで...」などの残存テキストがある場合、
-            ; 特殊マーカー「@@NEWLINE@@」を頭につけて保存し、後の結合を防ぐ
-            remaining := Trim(m[2])
-            if (remaining != "")
-                result.Push("@@NEWLINE@@" . remaining)
-
+        ; 【修正の肝】行が「時」だけで終わっている場合（単独の頓服用法行）
+        if (RegExMatch(line, "^\S+時$")) {
+            if (result.Length > 0) {
+                ; 直前の薬品行（1錠）のすぐ後ろに「発熱時」をくっつける
+                result[result.Length] .= line
+            } else {
+                result.Push(line)
+            }
         } else if (RegExMatch(line, "^分\d+\s\d")) {
             line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
             result.Push(line)
@@ -127,6 +124,7 @@ MergeSpecificPatterns(text) {
             result.Push(line)
         }
     }
+    
     finalText := ""
     for l in result
         finalText .= l "`n"
