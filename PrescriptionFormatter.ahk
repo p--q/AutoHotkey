@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v3_Fixed.ahk
-; Version: 3.1
-; Description: 処方整形スクリプト (AHK v2) - continue予約語エラー修正版
+; File: PrescriptionFormatter_v3.2.ahk
+; Version: 3.2
+; Description: 処方整形スクリプト (AHK v2) - マルチラインオプション適用版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -27,6 +27,7 @@
         lines := StrSplit(text, "`n", "`r")
         result := ""
         for line in lines {
+            ; 1行ずつの判定なので m) は不要
             if (RegExMatch(line, "\d+\S*[錠pg枚ﾄ]$")) {
                 line := RegExReplace(line, "(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
                 line := RegExReplace(line, "cap$", "c")
@@ -99,7 +100,7 @@
 }
 
 ; ------------------------------------------------------------------------------
-; 各機能関数 (エラー修正済み)
+; 各機能関数
 ; ------------------------------------------------------------------------------
 
 FinalizeText(text) {
@@ -113,7 +114,6 @@ FilterOutpatientOrder(text) {
     lines := StrSplit(text, "`n", "`r")
     result := ""
     for line in lines {
-        ; --- 修正箇所: continueを改行して記述 ---
         if (line == "" || RegExMatch(line, "^(--|<R|処方箋)"))
             continue
         result .= line "`n"
@@ -137,10 +137,10 @@ ReorganizeByTrigger(text) {
     buffer := ""
     
     for line in lines {
-        ; --- 修正箇所: continueを改行して記述 ---
         if (RegExMatch(line, "^処方日") || line == "")
             continue
         
+        ; line単位の判定なので m) は不要
         if (RegExMatch(line, "\d+\S*[錠pg枚ﾄ]$")) {
             newOutput .= buffer . line . "`n"
             buffer := ""
@@ -154,10 +154,12 @@ ReorganizeByTrigger(text) {
     return newOutput . buffer
 }
 
+; 関数A: マルチラインオプションを適用
 ApplyBasicFormatting(text) {
-    text := RegExReplace(text, "\d+\S*分$", "")
-    text := RegExReplace(text, "(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
-    text := RegExReplace(text, "cap$", "c")
+    ; (*ANYCRLF)m) を使用して、複数行テキスト内の各行末を正確に捉えます
+    text := RegExReplace(text, "(*ANYCRLF)m)\d+\S*分$", "")
+    text := RegExReplace(text, "(*ANYCRLF)m)(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
+    text := RegExReplace(text, "(*ANYCRLF)m)cap$", "c")
     return text
 }
 
@@ -166,7 +168,6 @@ MergeSpecificPatterns(text) {
     result := []
     
     for line in lines {
-        ; --- 修正箇所: continueを改行して記述 ---
         if (line == "")
             continue
         
