@@ -1,9 +1,8 @@
 /*
  * File: PrescriptionFormatter.ahk
- * Version: 1.5
+ * Version: 1.6
  * Description: 処方オーダーおよび薬品DI情報のテキストを整形します。
- * スペース（全角・半角・タブ）は削除しますが、改行は維持します。
- * 外来処方の削除対象に「処方箋」から始まる行を含めます。
+ * 行頭の「分1-3」「外)」「吸入用」、および行末の「分」を含む行を物理的に削除します。
  */
 
 #Requires AutoHotkey v2.0
@@ -18,10 +17,15 @@
     if (RegExMatch(text, "m)^商品名")) {
         text := RegExReplace(text, "m)^商品名[ 　\t]*", "")
     } else {
-        text := RegExReplace(text, "m)^分[123]\S+", "")
-        text := RegExReplace(text, "m)^外\)", "")
-        text := RegExReplace(text, "m)^吸入用", "")
-        text := RegExReplace(text, "m)\d+\S+分$", "")
+        ; --- 行削除セクション ---
+        ; 「分1,2,3」で始まる行を削除
+        text := RegExReplace(text, "m)^分[123].*(\R|$)", "")
+        ; 「外)」で始まる行を削除
+        text := RegExReplace(text, "m)^外\).*(\R|$)", "")
+        ; 「吸入用」で始まる行を削除
+        text := RegExReplace(text, "m)^吸入用.*(\R|$)", "")
+        ; 行末が「数字+文字+分」で終わる行を削除
+        text := RegExReplace(text, "m)^.*\d+\S+分$(\R|$)", "")
         
         text := RemoveLinesByPrescriptionType(text)
         text := InsertSpaceBeforeUnitAndReplace(text)
@@ -62,7 +66,6 @@
         } else if (RegExMatch(currentLine, "^分\d\S+")) {
             currentLine := AbbreviateUsagePatternC(currentLine)
         }
-        ; 各行の末尾に改行を付与して結合
         processedText .= currentLine "`r`n"
     }
     
@@ -91,7 +94,6 @@ ConvertFullToHalf(str) {
     if (str == "") {
         return ""
     }
-    ; LCMAP_HALFWIDTH = 0x00400000, LOCALE_USER_DEFAULT = 0x400
     size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
     DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
@@ -105,10 +107,8 @@ RemoveLinesByPrescriptionType(text) {
     }
     
     if (SubStr(lines[1], 1, 2) == "--") {
-        ; Outpatient Order
         result := ""
         for line in lines {
-            ; 修正箇所: 「処方箋」から始まる行も削除対象とする
             if (RegExMatch(line, "^(--|<R|処方箋)") || line == "") {
                 continue
             }
@@ -116,7 +116,6 @@ RemoveLinesByPrescriptionType(text) {
         }
         return result
     } else if (RegExMatch(lines[1], "^処方日")) {
-        ; Inpatient Order
         text := CombineInpatientOrderLines(text)
         return RegExReplace(text, "m)^処方日.*(\R|$)", "")
     }
@@ -166,8 +165,8 @@ CombineInpatientOrderLines(text) {
 }
 
 InsertSpaceBeforeUnitAndReplace(text) {
-    text := RegExReplace(text, "m)\d+\S+分$", "")
-    ; Insert placeholder before units
+    ; ここでも用法行の削除（行末が「分」）を補強
+    text := RegExReplace(text, "m)^.*\d+\S+分$(\R|$)", "")
     text := RegExReplace(text, "m)(\d+\S+[錠pg枚ﾄ]$)", "@@SPACE@@$1")
     text := RegExReplace(text, "icap$", "c")
     return text
@@ -180,7 +179,6 @@ CombineUsageLinesAndRemoveSpecificWords(text) {
         if (line == "") {
             continue
         }
-        ; Combine lines starting with something like "time" to the previous line
         if (RegExMatch(line, "^\S+時") && newLines.Length > 0) {
             newLines[newLines.Length] .= line
         } else {
