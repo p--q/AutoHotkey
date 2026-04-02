@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v4.3.ahk
-; Version: 4.3
-; Description: 処方整形スクリプト (AHK v2) - 頓服指示・回数制限維持版
+; File: PrescriptionFormatter_v4.4.ahk
+; Version: 4.4
+; Description: 処方整形スクリプト (AHK v2) - 頓服結合・改行位置固定版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -43,8 +43,10 @@
     }
     
     text := ApplyBasicFormatting(text)
-    ; ここで「発熱時」を分離し、残りを次行に送る
+    ; 1. 「発熱時」を薬品行に結合し、残りの「1日3回...」は特殊マーカーで保護
     text := MergeSpecificPatterns(text)
+    
+    ; 空白削除（@@NEWLINE@@ は削除されない）
     text := RegExReplace(text, "[ \t]+", "")
     
     lines := StrSplit(text, "`n", "`r")
@@ -55,8 +57,8 @@
             continue
 
         ; 用法としてマージすべきパターンの判定
-        if (RegExMatch(line, "^(分\d|1日\d回|\d回分)")) {
-            ; 表記の簡略化（ただし「1日3回」などは消さない）
+        ; @@NEWLINE@@ を含む行は、マージ対象から外して独立させる
+        if (RegExMatch(line, "^(分\d|1日\d回|\d回分)") && !InStr(line, "@@NEWLINE@@")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
@@ -67,7 +69,8 @@
             else
                 processedLines.Push(line)
         } else {
-            processedLines.Push(line)
+            ; 薬品名行、または「@@NEWLINE@@」で保護された頓服指示行
+            processedLines.Push(StrReplace(line, "@@NEWLINE@@", ""))
         }
     }
     
@@ -96,18 +99,20 @@ MergeSpecificPatterns(text) {
         if (line == "")
             continue
 
-        ; 非強欲マッチで、行の最初にある「時」までを抽出
+        ; 「発熱時」などを抽出
         if (RegExMatch(line, "^(\S+?時)(.*)$", &m)) {
-            ; 1. 「発熱時」を上の薬品行にマージ
+            ; 1. 「発熱時」を直前の行に結合
             if (result.Length > 0)
                 result[result.Length] .= m[1]
             else
                 result.Push(m[1])
             
-            ; 2. 残りのテキスト（「1日3回まで。頭痛...」）を独立した行として保持
+            ; 2. 「1日3回まで...」などの残存テキストがある場合、
+            ; 特殊マーカー「@@NEWLINE@@」を頭につけて保存し、後の結合を防ぐ
             remaining := Trim(m[2])
             if (remaining != "")
-                result.Push(remaining)
+                result.Push("@@NEWLINE@@" . remaining)
+
         } else if (RegExMatch(line, "^分\d+\s\d")) {
             line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
             result.Push(line)
