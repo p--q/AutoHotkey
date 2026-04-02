@@ -1,6 +1,6 @@
 /*
  * File: PrescriptionFormatter.ahk
- * Version: 1.2
+ * Version: 1.3
  * Description: 処方オーダーおよび薬品DI情報のテキストを整形し、
  * 特定の規則に基づいた用法省略記号への置換や不要行の削除を行います。
  */
@@ -55,7 +55,9 @@
     lines := StrSplit(text, "`n", "`r")
     processedText := ""
     for line in lines {
-        if (line == "") continue
+        if (line == "") {
+            continue
+        }
         
         if (RegExMatch(line, "^分[123]\S+")) {
             processedText .= AbbreviateUsagePatternB(line)
@@ -90,7 +92,9 @@ GetTextAndConvertToHalfWidth() {
 
 ; Convert Katakana, Numbers, and Alphabets using Windows API
 ConvertFullToHalf(str) {
-    if (str == "") return ""
+    if (str == "") {
+        return ""
+    }
     ; LCMAP_HALFWIDTH = 0x00400000, LOCALE_USER_DEFAULT = 0x400
     size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
@@ -101,14 +105,17 @@ ConvertFullToHalf(str) {
 ; Corresponds to FuncG: Filter lines based on order type
 RemoveLinesByPrescriptionType(text) {
     lines := StrSplit(text, "`n", "`r")
-    if (lines.Length == 0) return text
+    if (lines.Length == 0) {
+        return text
+    }
     
     if (SubStr(lines[1], 1, 2) == "--") {
         ; Outpatient Order
         result := ""
         for line in lines {
-            if (RegExMatch(line, "^(--|<R|処方箋期限)") || line == "")
+            if (RegExMatch(line, "^(--|<R|処方箋期限)") || line == "") {
                 continue
+            }
             result .= line "`n"
         }
         return result
@@ -128,7 +135,9 @@ CombineInpatientOrderLines(text) {
     
     for line in lines {
         if (RegExMatch(line, "^処方日")) {
-            if (currentSection != "") sections.Push(currentSection)
+            if (currentSection != "") {
+                sections.Push(currentSection)
+            }
             currentSection := line "`n"
         } else {
             currentSection .= line "`n"
@@ -142,7 +151,9 @@ CombineInpatientOrderLines(text) {
         combinedSec := ""
         buffer := ""
         for sLine in secLines {
-            if (sLine == "") continue
+            if (sLine == "") {
+                continue
+            }
             if (RegExMatch(sLine, "^処方日")) {
                 combinedSec .= sLine "`n"
                 continue
@@ -173,7 +184,9 @@ CombineUsageLinesAndRemoveSpecificWords(text) {
     lines := StrSplit(text, "`n", "`r")
     newLines := []
     for line in lines {
-        if (line == "") continue
+        if (line == "") {
+            continue
+        }
         ; Combine lines starting with "time" to the previous line
         if (RegExMatch(line, "^\S+時") && newLines.Length > 0) {
             newLines[newLines.Length] .= line
@@ -216,6 +229,6 @@ AbbreviateUsagePatternC(line) {
 }
 
 ShowNotification(msg) {
-    ToolTip msg
-    SetTimer () => ToolTip(), -1500
+    ToolTip(msg)
+    SetTimer(() => ToolTip(), -1500)
 }
