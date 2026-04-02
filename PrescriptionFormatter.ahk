@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v3.2.ahk
-; Version: 3.2
-; Description: 処方整形スクリプト (AHK v2) - マルチラインオプション適用版
+; File: PrescriptionFormatter_v3.3.ahk
+; Version: 3.3
+; Description: 処方整形スクリプト (AHK v2) - 正規表現オプション修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -10,31 +10,28 @@
 ; Win + Alt + S : 用法なし出力
 ; ------------------------------------------------------------------------------
 #!s:: {
-    text := ProcessInitialInput() ; 関数E
+    text := ProcessInitialInput()
     
     if (RegExMatch(text, "^商品名")) {
-        ; DI情報の処理
         text := RegExReplace(text, "^商品名\s*", "")
         text := FinalizeText(text)
         A_Clipboard := text
         ToolTip("整形完了(用法錠数なし)")
     } else {
-        ; 入院処方オーダー判定
         if (RegExMatch(text, "^処方日")) {
-            text := ReorganizeByTrigger(text) ; 関数D
+            text := ReorganizeByTrigger(text)
         }
         
         lines := StrSplit(text, "`n", "`r")
         result := ""
         for line in lines {
-            ; 1行ずつの判定なので m) は不要
             if (RegExMatch(line, "\d+\S*[錠pg枚ﾄ]$")) {
                 line := RegExReplace(line, "(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
                 line := RegExReplace(line, "cap$", "c")
                 result .= line "`n"
             }
         }
-        text := RegExReplace(result, "[ \t]+", "") ; 改行以外の空白削除
+        text := RegExReplace(result, "[ \t]+", "")
         text := FinalizeText(text)
         A_Clipboard := text
         ToolTip("整形完了(用法なし)")
@@ -46,16 +43,16 @@
 ; Win + Alt + D : 用法あり出力
 ; ------------------------------------------------------------------------------
 #!d:: {
-    text := ProcessInitialInput() ; 関数E
+    text := ProcessInitialInput()
     
     if (SubStr(text, 1, 2) == "--") {
-        text := FilterOutpatientOrder(text) ; 関数G
+        text := FilterOutpatientOrder(text)
     } else if (RegExMatch(text, "^処方日")) {
-        text := ReorganizeByTrigger(text) ; 関数D
+        text := ReorganizeByTrigger(text)
     }
     
-    text := ApplyBasicFormatting(text) ; 関数A
-    text := MergeSpecificPatterns(text) ; 関数F
+    text := ApplyBasicFormatting(text)
+    text := MergeSpecificPatterns(text)
     
     text := RegExReplace(text, "[ \t]+", "")
     
@@ -140,7 +137,6 @@ ReorganizeByTrigger(text) {
         if (RegExMatch(line, "^処方日") || line == "")
             continue
         
-        ; line単位の判定なので m) は不要
         if (RegExMatch(line, "\d+\S*[錠pg枚ﾄ]$")) {
             newOutput .= buffer . line . "`n"
             buffer := ""
@@ -154,12 +150,11 @@ ReorganizeByTrigger(text) {
     return newOutput . buffer
 }
 
-; 関数A: マルチラインオプションを適用
 ApplyBasicFormatting(text) {
-    ; (*ANYCRLF)m) を使用して、複数行テキスト内の各行末を正確に捉えます
-    text := RegExReplace(text, "(*ANYCRLF)m)\d+\S*分$", "")
-    text := RegExReplace(text, "(*ANYCRLF)m)(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
-    text := RegExReplace(text, "(*ANYCRLF)m)cap$", "c")
+    ; オプション記述を修正しました
+    text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
+    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
+    text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
 
