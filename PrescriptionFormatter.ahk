@@ -1,14 +1,14 @@
 ; ==============================================================================
-; File: PrescriptionFormatter.ahk
-; Version: 1.1
-; Description: 処方オーダーのテキストを整形し、DI情報や用法を整理して
-;              クリップボードに再格納するスクリプト。
+; File: PrescriptionFormatter_v2.ahk
+; Version: 2.0
+; Description: 処方オーダーおよびDI情報の整形スクリプト。
+;              Win+Alt+S (用法なし), Win+Alt+D (用法あり)
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
 
 ; ------------------------------------------------------------------------------
-; Win + Alt + S : 出力に用法がない（DI情報または薬品名のみの抽出）
+; Win + Alt + S : 出力に用法がない
 ; ------------------------------------------------------------------------------
 #!s:: {
     text := ProcessInitialInput() ; 関数E
@@ -16,9 +16,10 @@
     if (RegExMatch(text, "^商品名")) {
         ; DI情報の処理
         text := RegExReplace(text, "^商品名\s*", "")
+        FinalizeClipboard(text, "整形完了(用法錠数なし)") ; 関数H
     } else {
         ; 薬品名抽出処理
-        text := ReorganizePrescriptionLines(text) ; 関数D
+        text := ReorganizeByTrigger(text) ; 関数D
         
         lines := StrSplit(text, "`n", "`r")
         result := ""
@@ -29,11 +30,9 @@
                 result .= line "`n"
             }
         }
-        text := result
-        text := RegExReplace(text, "[ \t]+", "") ; 改行以外の空白削除
+        text := RegExReplace(result, "[ \t]+", "") ; 改行以外の空白削除
+        FinalizeClipboard(text, "整形完了(用法なし)") ; 関数H
     }
-    
-    FinalizeClipboard(text)
 }
 
 ; ------------------------------------------------------------------------------
@@ -42,7 +41,7 @@
 #!d:: {
     text := ProcessInitialInput() ; 関数E
     text := FilterOrderType(text)  ; 関数G
-    text := ApplyPrescriptionFormatting(text) ; 関数A
+    text := ApplyBasicFormatting(text) ; 関数A
     text := MergeSpecificPatterns(text) ; 関数F
     
     text := RegExReplace(text, "[ \t]+", "") ; 改行以外の空白削除
@@ -60,7 +59,6 @@
             line := RegExReplace(line, "食前", "前")
             line := RegExReplace(line, "\[食間\]", "")
             line := RegExReplace(line, "1日\d回", "")
-            ; 前の行と結合
             if (processedLines.Length > 0)
                 processedLines[processedLines.Length] .= line
             else
@@ -71,43 +69,42 @@
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "\[食間\]", "")
             line := RegExReplace(line, "1日\d回", "")
-            ; 前の行と結合
             if (processedLines.Length > 0)
                 processedLines[processedLines.Length] .= line
             else
                 processedLines.Push(line)
         } else {
-            processedLines.Push(line)
+            if (line != "")
+                processedLines.Push(line)
         }
     }
     
-    ; 配列を文字列に戻す
     text := ""
     for line in processedLines
         text .= line "`n"
         
-    FinalizeClipboard(text)
+    FinalizeClipboard(text, "整形完了(用法あり)") ; 関数H
 }
 
 ; ------------------------------------------------------------------------------
 ; 各機能関数
 ; ------------------------------------------------------------------------------
 
-; 関数E: 選択範囲の取得と全角半角変換
-ProcessInitialInput() {
-    A_Clipboard := ""
-    Send("^c")
-    if !ClipWait(0.5) {
-        ; 選択範囲がなければ現在のクリップボードを使用
-    }
-    input := A_Clipboard
-    return StrConvert(input, "H") 
+; 関数H: 最終整形とクリップボード格納
+FinalizeClipboard(text, message) {
+    text := StrReplace(text, "@@SPACE@@", " ")
+    text := RegExReplace(text, "\(\Sとして\)", "")
+    text := StrReplace(text, "(非持参", "")
+    text := Trim(text, "`n`r ")
+    A_Clipboard := text
+    ToolTip(message)
+    SetTimer(() => ToolTip(), -2000)
 }
 
-; 関数G: オーダー種別の判別とフィルタリング
+; 関数G: オーダー種別判別
 FilterOrderType(text) {
     if (SubStr(text, 1, 2) == "--") {
-        ; 外来処方
+        ; 外来
         lines := StrSplit(text, "`n", "`r")
         result := ""
         for line in lines {
@@ -117,43 +114,59 @@ FilterOrderType(text) {
         }
         return result
     } else if (RegExMatch(text, "^処方日")) {
-        ; 入院処方
-        text := ReorganizePrescriptionLines(text) ; 関数D
-        text := RegExReplace(text, "m)^処方日.*`n?", "")
-        return text
+        ; 入院
+        return ReorganizeByTrigger(text) ; 関数D呼び出し
     }
     return text
 }
 
-; 関数D: 処方行の再構成
-ReorganizePrescriptionLines(text) {
+; 関数E: 取得と全角半角変換（カタカナ・括弧含む）
+ProcessInitialInput() {
+    savedClipboard := A_Clipboard
+    A_Clipboard := ""
+    Send("^c")
+    if !ClipWait(0.5) {
+        A_Clipboard := savedClipboard
+    }
+    input := A_Clipboard
+    ; StrConvertの"HK"モードでカタカナも半角化
+    return StrConvert(input, "HK") 
+}
+
+; 関数D: トリガー行による結合（処方日は破棄）
+ReorganizeByTrigger(text) {
     lines := StrSplit(text, "`n", "`r")
     newOutput := ""
     buffer := ""
     
     for line in lines {
-        if (line == "")
+        if (RegExMatch(line, "^処方日") || line == "")
             continue
         
-        if (InStr(line, " ")) { ; トリガー行（スペースあり）
+        ; 「数字...単位」にマッチする行がトリガー
+        if (RegExMatch(line, "\d+\S*[錠pg枚ﾄ]$")) {
             newOutput .= buffer . line . "`n"
             buffer := ""
         } else {
-            buffer .= line
+            ; スペースを含まない行（薬品名の断片など）をバッファ
+            if (!InStr(line, " "))
+                buffer .= line
+            else
+                newOutput .= line . "`n" ; スペースがあるがトリガーでない行はそのまま
         }
     }
     return newOutput . buffer
 }
 
-; 関数A: 基本的な薬品単位の整形
-ApplyPrescriptionFormatting(text) {
+; 関数A: 基本整形
+ApplyBasicFormatting(text) {
     text := RegExReplace(text, "\d+\S*分$", "")
     text := RegExReplace(text, "(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
     text := RegExReplace(text, "cap$", "c")
     return text
 }
 
-; 関数F: 行の結合と特定パターンの置換
+; 関数F: 行結合とパターン置換
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
@@ -167,7 +180,7 @@ MergeSpecificPatterns(text) {
                 result[result.Length] .= line
             else
                 result.Push(line)
-        } else if (RegExMatch(line, "^分\d+\s\d", &m)) {
+        } else if (RegExMatch(line, "^分\d+\s\d")) {
             line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
             result.Push(line)
         } else if (RegExMatch(line, "^外\)\s")) {
@@ -189,30 +202,18 @@ MergeSpecificPatterns(text) {
     return finalText
 }
 
-; 共通の最終処理: 特殊文字の置換とクリーンアップ
-FinalizeClipboard(text) {
-    text := StrReplace(text, "@@SPACE@@", " ")
-    text := RegExReplace(text, "\(\Sとして\)", "")
-    text := Trim(text, "`n`r ")
-    A_Clipboard := text
-    ToolTip("整形完了")
-    SetTimer(() => ToolTip(), -2000)
-}
-
-; 全角・半角変換補助関数
+; 全角・半角変換補助（Win32 APIを使用）
 StrConvert(str, mode) {
-    static diff := 0xFEE0
-    result := ""
-    loop parse, str {
-        charAlt := Ord(A_LoopField)
-        if (mode = "H") { ; 全角から半角
-            if (charAlt >= 0xFF01 && charAlt <= 0xFF5E)
-                result .= Chr(charAlt - diff)
-            else if (charAlt = 0x3000) ; 全角スペース
-                result .= Chr(0x0020)
-            else
-                result .= A_LoopField
-        }
-    }
-    return result
+    ; モード H: 半角化(英数), K: カタカナ半角化
+    ; LCMAP_HALFWIDTH = 0x00400000
+    static LCMAP_HALFWIDTH := 0x00400000
+    size := DllCall("MultiByteToWideChar", "UInt", 65001, "UInt", 0, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
+    buf := Buffer(size * 2)
+    DllCall("MultiByteToWideChar", "UInt", 65001, "UInt", 0, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
+    
+    size2 := DllCall("LCMapStringW", "UInt", 0x400, "UInt", LCMAP_HALFWIDTH, "Ptr", buf, "Int", size, "Ptr", 0, "Int", 0)
+    buf2 := Buffer(size2 * 2)
+    DllCall("LCMapStringW", "UInt", 0x400, "UInt", LCMAP_HALFWIDTH, "Ptr", buf, "Int", size, "Ptr", buf2, "Int", size2)
+    
+    return StrGet(buf2, "UTF-16")
 }
