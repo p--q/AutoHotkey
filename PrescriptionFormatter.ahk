@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v4.0.ahk
-; Version: 4.0
-; Description: 処方整形スクリプト (AHK v2) - 頓服結合・二重マッチ完全対応版
+; File: PrescriptionFormatter_v4.1.ahk
+; Version: 4.1
+; Description: 処方整形スクリプト (AHK v2) - 構文エラー修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -48,23 +48,18 @@
         text := ReorganizeByTrigger(text)
     }
     
-    ; 1. 基本整形（単位のマーキング等）
     text := ApplyBasicFormatting(text)
-    ; 2. 「発熱時」などの抽出と薬品行への結合
     text := MergeSpecificPatterns(text)
-    ; 3. 余分な空白の削除
     text := RegExReplace(text, "[ \t]+", "")
     
     lines := StrSplit(text, "`n", "`r")
     processedLines := []
     
     for line in lines {
-        if (line == "") continue
+        if (line == "")
+            continue
 
-        ; 用法としてマージすべきパターンの判定
-        ; 分n / 1日n回 / n回分 などで始まる行を薬品行に結合する
         if (RegExMatch(line, "^(分\d|1日\d回|\d回分)")) {
-            ; 表記の簡略化
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
@@ -76,7 +71,6 @@
             else
                 processedLines.Push(line)
         } else {
-            ; 薬品名、またはマージ対象外の行
             processedLines.Push(line)
         }
     }
@@ -105,18 +99,15 @@ MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
     for line in lines {
-        if (line == "") continue
+        if (line == "")
+            continue
 
-        ; 非強欲マッチ「+?」で最初に出現する「時」を分離
         if (RegExMatch(line, "^(\S+?時)(.*)$", &m)) {
-            ; 1. 「発熱時」などを直前の薬品行の末尾に結合
             if (result.Length > 0)
                 result[result.Length] .= m[1]
             else
                 result.Push(m[1])
             
-            ; 2. 残りのテキスト（「1日3回まで...」）を独立した行として追加
-            ; これにより、後のメインループで用法として処理可能になる
             remaining := Trim(m[2])
             if (remaining != "")
                 result.Push(remaining)
