@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v5.8.ahk
-; Version: 5.8
-; Description: 処方整形 (AHK v2) - 判定ロジックの適正化(回分削除済み対応)
+; File: PrescriptionFormatter_v5.9.ahk
+; Version: 5.9
+; Description: 処方整形 (AHK v2) - 「時」判定の末尾空白許容修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -56,7 +56,6 @@
         if (line == "")
             continue
 
-        ; 用法判定 (分n, 1日n回) ※回分はApplyBasicFormattingで削除済み
         if (RegExMatch(line, "^(分\d|1日\d回)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
@@ -69,8 +68,8 @@
             
             prevLine := (processedLines.Length > 0) ? processedLines[processedLines.Length] : ""
             
-            ; 直前が「時」で終わる場合は結合しない。それ以外は結合。
-            if (!isBlock && processedLines.Length > 0 && !RegExMatch(prevLine, "時$")) {
+            ; 修正：直前が「時」で終わる（空白許容）場合は結合しない
+            if (!isBlock && processedLines.Length > 0 && !RegExMatch(prevLine, "時\s*$")) {
                 processedLines[processedLines.Length] .= line
             } else {
                 processedLines.Push(line)
@@ -92,9 +91,7 @@
 ; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
-    ; 用法末尾の「分/日分」を先に削除
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-    ; 単位のマーキング
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -111,8 +108,8 @@ MergeSpecificPatterns(text) {
             continue
         }
         
-        ; 修正：回分は削除済みなので「時」のみを判定
-        if (RegExMatch(line, "^.+時$")) {
+        ; 修正：末尾の空白を許容する判定に変更
+        if (RegExMatch(line, "^.+時\s*$")) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= line
             else
