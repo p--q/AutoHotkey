@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.ahk
-; Version: 6.5
-; Description: 処方整形 (AHK v2) - v6.0ベースで「外)」行の除外ロジックを統合
+; File: PrescriptionFormatter_v6.5.1.ahk
+; Version: 6.5.1
+; Description: 処方整形 (AHK v2) - 「〜として」の改行跨ぎ削除をApplyBasicFormattingへ移動
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -56,7 +56,6 @@
         if (line == "")
             continue
 
-        ; 用法判定 (分n, 1日n回, 1日n枚)
         if (RegExMatch(line, "^(分\d|1日\d回|1日\d枚)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
@@ -91,17 +90,15 @@
 ; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
-    text := StrReplace(text, "吸入用", "")
-    text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-
-    ; v6.0のロジックに「外)」除外条件を追加
-    ; 行頭から「外)」を含まない行のみ、末尾の数量に @@SPACE@@ を付与する
-    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*外\)).*?(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
+    ; ご要望の修正：改行を跨いで「〜として」のカッコ内を削除
+    text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
     
+    text := StrReplace(text, "吸入用", "")
+    ; シンプルなマーカー付与
+    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
-
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
@@ -112,7 +109,6 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-        
         if (RegExMatch(line, "^.+時\s*$")) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= line
@@ -129,16 +125,18 @@ MergeSpecificPatterns(text) {
             result.Push(line)
         }
     }
-    finalText := ""
+    finalOutput := ""
     for l in result
-        finalText .= l "`n"
-    return finalText
+        finalOutput .= l "`n"
+    return finalOutput
 }
 
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
+    ; ここから「〜として」の削除行を撤去しました
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
+    text := RegExReplace(text, " +", " ")
     return Trim(text, "`n`r")
 }
 
