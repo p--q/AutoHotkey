@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.8.9.ahk
-; Version: 6.8.9
-; Description: 処方整形 (AHK v2) - 小数点(0.5錠など)の消失を防止する修正
+; File: PrescriptionFormatter_v6.7.ahk
+; Version: 6.7
+; Description: 処方整形 (AHK v2) - 薬品名内の不自然な改行(500m\ng等)の修復実装
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -92,31 +92,21 @@
 ApplyBasicFormatting(text) {
     text := StrReplace(text, "吸入用", "")
     
-    ; 1. 単位の泣き別れを修復 (500m\ng)
+    ; --- 薬品名内の不自然な改行修復ロジック ---
+    ; 1. 「500m\ng」のように単位の途中で切れたものを結合
     text := RegExReplace(text, "(\d+)m\s*\r?\n\s*g", "$1mg")
-    
-    ; 2. 【重要】小数点を含む数値を一時的に保護 (薬品名結合ロジックによる破壊を防止)
-    text := RegExReplace(text, "(\d)\.(\d)", "$1@@DOT@@$2")
-    
-    ; 3. カタカナ薬品名の泣き別れを修復
+    ; 2. 薬品名(カタカナ等)の途中で切れたものを結合 (注釈含む)
     text := RegExReplace(text, "([ァ-ヶ])\s*\r?\n\s*([ァ-ヶ])", "$1$2")
-    
-    ; 4. 括弧内の改行を修復
+    ; 3. 括弧内の改行を修復
     text := RegExReplace(text, "\(([^)]*)\s*\r?\n\s*([^)]*)\)", "($1$2)")
     
-    ; 用法末尾の「分」を保護
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-    
-    ; 数量マーカー付与
     unitPattern := "(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$"
-    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*(?:外\)|日分))(?=.*" . unitPattern . ").*?\K" . unitPattern, "@@SPACE@@$1")
-    
-    ; 保護した小数点を戻す
-    text := StrReplace(text, "@@DOT@@", ".")
-    
+    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*外\))(?=.*" . unitPattern . ").*?\K" . unitPattern, "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
+
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
@@ -127,6 +117,7 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
+        
         if (RegExMatch(line, "^.+時\s*$")) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= line
@@ -143,19 +134,23 @@ MergeSpecificPatterns(text) {
             result.Push(line)
         }
     }
-    finalOutput := ""
+    finalText := ""
     for l in result
-        finalOutput .= l "`n"
-    return finalOutput
+        finalText .= l "`n"
+    return finalText
 }
 
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     text := RegExReplace(text, "\d+枚\s(1日\d+枚)", "$1")
+    
+    ; 「(レボフロキサシンとして)」等の注釈を削除
     text := RegExReplace(text, "\([^)]+として\)", "")
+    ; 余計なカタカナの残骸などを掃除
+    text := RegExReplace(text, " +", " ")
+    
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
-    text := RegExReplace(text, " +", " ")
     return Trim(text, "`n`r")
 }
 
@@ -227,7 +222,6 @@ ProcessInitialInput() {
 }
 
 ConvertToHalfWidth(str) {
-    ; Windows APIで全角を半角へ変換
     size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
     DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
