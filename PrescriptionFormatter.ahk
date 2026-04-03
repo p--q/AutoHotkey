@@ -1,8 +1,8 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.8.ahk
-; Version: 6.5.8
-; Description: \S* の欲張り一致によるマッチ失敗を修正。
-;              1cap 等の行を確実にトリガーとして認識し、薬品名の泣き別れを結合。
+; File: PrescriptionFormatter_v6.6.0.ahk
+; Version: 6.6.0
+; Description: 単位(錠p枚ﾄcg)の直前にマーカーを付与し、薬品名の泣き別れを強力に結合。
+;              Win+Alt+S / Win+Alt+D の両方で、外用薬の数量除去置換を実行。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -23,13 +23,17 @@
         lines := StrSplit(text, "`n", "`r")
         result := ""
         for line in lines {
+            ; 数量マーカーが含まれる行のみを抽出
             if (InStr(line, "@@SPACE@@")) {
                 result .= line "`n"
             }
         }
         text := RegExReplace(result, "[ \t]+", "")
         text := FinalizeText(text)
+        
+        ; 【ご依頼の修正】FinalizeTextの後に外用薬の枚数置換を実行
         text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\d+枚)$", " $1")
+        
         A_Clipboard := text
         ToolTip("整形完了(用法なし)")
     }
@@ -85,6 +89,8 @@
         text .= line "`n"
         
     text := FinalizeText(text)
+    
+    ; 【ご依頼の修正】FinalizeTextの後に外用薬の枚数置換を実行
     text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\d+枚)$", " $1")
     
     A_Clipboard := text
@@ -92,18 +98,22 @@
     SetTimer(() => ToolTip(), -2000)
 }
 
-; --- 共通関数: 前処理 ---
+; --- 共通関数: 前処理 (トリガー定義) ---
 ApplyBasicFormatting(text) {
     text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
     text := RegExReplace(text, "m)\d+\S+分$", "")
     text := StrReplace(text, "吸入用", "")
-    ; 修正：\S*? (非欲張り一致) にすることで末尾文字 [錠p枚ﾄ] を確実に残す
-    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*?([錠p枚ﾄ]|cap)$|\s\d+\S*g$)", "@@SPACE@@$1")
-    text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
+    
+    ; 数量マーカーの付与: 数字 + 単位(錠p枚ﾄcg) のパターンを見つけたら前に挿入
+    ; 行末($)判定に頼らないことで、後ろに余計なスペースがあっても確実に補足する
+    text := RegExReplace(text, "i)(\d+)\s*([錠p枚ﾄ]|cap|g)", "@@SPACE@@$1$2")
+    
+    ; cap を c に統一
+    text := RegExReplace(text, "i)cap", "c")
     return text
 }
 
-; --- 共通関数: ブロック整理 ---
+; --- 共通関数: 処方日ブロック整理 ---
 ReorganizeByTrigger(text) {
     blocks := []
     currentBlock := []
@@ -131,9 +141,11 @@ ReorganizeByTrigger(text) {
         buffer := ""
         for line in blockLines {
             if (InStr(line, "@@SPACE@@")) {
+                ; バッファ(泣き別れた薬品名) + 数量行 を結合
                 finalOutput .= buffer . line . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
                 buffer := ""
             } else {
+                ; スペースを含まない行は無条件でバッファへ貯める(薬品名の断片)
                 if (!InStr(line, " ") && !InStr(line, "　")) {
                     buffer .= line
                 } else {
@@ -147,7 +159,7 @@ ReorganizeByTrigger(text) {
     return finalOutput
 }
 
-; --- 共通関数: 結合ロジック ---
+; --- 共通関数: 特殊用法結合 ---
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
@@ -180,6 +192,7 @@ MergeSpecificPatterns(text) {
     return finalOutput
 }
 
+; --- 共通関数: 仕上げ ---
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     text := StrReplace(text, "@@BLOCK@@", "")
@@ -189,6 +202,7 @@ FinalizeText(text) {
     return Trim(text, "`n`r")
 }
 
+; --- 共通関数: フィルタ ---
 FilterOutpatientOrder(text) {
     lines := StrSplit(text, "`n", "`r")
     result := ""
@@ -200,6 +214,7 @@ FilterOutpatientOrder(text) {
     return result
 }
 
+; --- 共通関数: 入力・半角化 ---
 ProcessInitialInput() {
     savedClip := A_Clipboard
     A_Clipboard := ""
