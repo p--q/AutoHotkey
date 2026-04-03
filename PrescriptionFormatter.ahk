@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.8.3.ahk
-; Version: 6.8.3
-; Description: 処方整形 (AHK v2) - 構文エラー(unitPatternの引用符)修正
+; File: PrescriptionFormatter_v6.8.4.ahk
+; Version: 6.8.4
+; Description: 処方整形 (AHK v2) - 構文エラー(FinalizeText内の引用符)を完全修正
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -98,7 +98,6 @@ ApplyBasicFormatting(text) {
     
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
     
-    ; 修正済み: 引用符を正確に閉じました
     unitPattern := "(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$"
     text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*(?:外\)|日分))(?=.*" . unitPattern . ").*?\K" . unitPattern, "@@SPACE@@$1")
     
@@ -116,31 +115,4 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-        if (RegExMatch(line, "^.+時\s*$")) {
-            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
-                result[result.Length] .= line
-            else
-                result.Push(line)
-        } 
-        else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
-            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
-                result[result.Length] .= "@@SPACE@@" . m[1]
-            else
-                result.Push("@@SPACE@@" . m[1])
-        } 
-        else {
-            result.Push(line)
-        }
-    }
-    finalText := ""
-    for l in result
-        finalText .= l "`n"
-    return finalText
-}
-
-FinalizeText(text) {
-    text := StrReplace(text, "@@SPACE@@", " ")
-    text := RegExReplace(text, "\d+枚\s(1日\d+枚)", "$1")
-    text := RegExReplace(text, "\([^)]+として\)", "")
-    text := RegExReplace(text, "\(\Sとして\)", "")
-    text := StrReplace(text, "(非
+        if (Reg
