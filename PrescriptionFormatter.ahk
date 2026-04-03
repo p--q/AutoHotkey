@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.2_Commented.ahk
-; Version: 6.5.2
-; Description: 処方整形 (AHK v2) - 安定版のロジックに解説コメントを付与
+; File: PrescriptionFormatter_v6.5.2_Fixed.ahk
+; Version: 6.5.2 (Modified)
+; Description: 処方整形 (AHK v2) - Sキー実行時に@@BLOCK@@が残る問題を修正
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -24,7 +24,8 @@
         for line in lines {
             ; 薬品名と数量の境界マーカー(@@SPACE@@)がある行のみを抽出
             if (InStr(line, "@@SPACE@@")) {
-                result .= line "`n"
+                ; Sキー時は用法を結合しないため、ここで@@BLOCK@@を事前に除去
+                result .= StrReplace(line, "@@BLOCK@@", "") "`n"
             }
         }
         text := RegExReplace(result, "[ \t]+", "")
@@ -58,7 +59,6 @@
             continue
         }
 
-        ; 用法行（1日3回など）のパターンマッチと正規化
         if (RegExMatch(line, "^(分\d|1日\d回|1日\d枚)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
@@ -71,7 +71,6 @@
             
             prevLine := (processedLines.Length > 0) ? processedLines[processedLines.Length] : ""
             
-            ; 直前の行が「時」で終わっていない（＝薬品名）なら、用法をその行に結合
             if (!isBlock && processedLines.Length > 0 && !RegExMatch(prevLine, "時\s*$")) {
                 processedLines[processedLines.Length] .= line
             } else {
@@ -93,18 +92,10 @@
 
 ; --- 共通関数: 前処理 ---
 ApplyBasicFormatting(text) {
-    ; s)オプションで改行を含む「(〜として)」を削除。[^)]+は「)」以外の1文字以上。
     text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
-    
-    ; m)オプションで各行末の「7日分」などを削除
     text := RegExReplace(text, "m)\d+\S+分$", "")
-    
     text := StrReplace(text, "吸入用", "")
-
-    ; 数量マーカー(@@SPACE@@)の付与
-    ; 行末が「数字+単位」または「スペース+数字+g」の場合に目印を付ける
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
-    
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
@@ -120,14 +111,12 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-        ; 行末が「時」で終わる指示（就寝時など）を薬品名と結合
         if (RegExMatch(line, "^.+時\s*$")) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= line
             else
                 result.Push(line)
         } 
-        ; 「外) 〜」形式の行を薬品名と結合
         else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= "@@SPACE@@" . m[1]
@@ -146,10 +135,12 @@ MergeSpecificPatterns(text) {
 
 ; --- 共通関数: 最終仕上げ ---
 FinalizeText(text) {
-    text := StrReplace(text, "@@SPACE@@", " ") ; マーカーを半角スペースに戻す
-    text := RegExReplace(text, "\(\Sとして\)", "") ; (1として)等の微細な注釈削除
+    text := StrReplace(text, "@@SPACE@@", " ")
+    ; 万が一残っていた場合の念のための除去を追加
+    text := StrReplace(text, "@@BLOCK@@", "")
+    text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
-    text := RegExReplace(text, " +", " ") ; 連続するスペースを1つに集約
+    text := RegExReplace(text, " +", " ")
     return Trim(text, "`n`r")
 }
 
@@ -158,7 +149,6 @@ ReorganizeByTrigger(text) {
     blocks := []
     currentBlock := []
     lines := StrSplit(text, "`n", "`r")
-    ; 処方日ごとに内容をグループ化
     for line in lines {
         if (RegExMatch(line, "^処方日")) {
             if (currentBlock.Length > 0)
@@ -182,7 +172,7 @@ ReorganizeByTrigger(text) {
         for line in blockLines {
             if (InStr(line, "@@SPACE@@")) {
                 outLine := buffer . line
-                if (triggerCount > 1) ; 複数薬品に1つの用法がかかる場合の目印
+                if (triggerCount > 1)
                     outLine .= "@@BLOCK@@"
                 finalOutput .= outLine "`n"
                 buffer := ""
