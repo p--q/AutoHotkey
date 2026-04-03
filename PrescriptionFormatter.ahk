@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.0_rev.ahk
-; Version: 6.0 (Revised)
-; Description: 処方整形 (AHK v2) - v6.0をベースに「枚」判定のみ追加
+; File: PrescriptionFormatter_v6.3.ahk
+; Version: 6.3
+; Description: 処方整形 (AHK v2) - 「外)」行のトリガー誤認防止ロジック実装
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -56,6 +56,7 @@
         if (line == "")
             continue
 
+        ; 用法判定 (分n, 1日n回, 1日n枚)
         if (RegExMatch(line, "^(分\d|1日\d回|1日\d枚)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
@@ -90,128 +91,9 @@
 ; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
+    ; 吸入用を先に削除
     text := StrReplace(text, "吸入用", "")
+    ; 用法末尾の「分/日分」を削除
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-    ; 「枚」を判定に追加
-    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
-    text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
-    return text
-}
 
-MergeSpecificPatterns(text) {
-    lines := StrSplit(text, "`n", "`r")
-    result := []
-    for line in lines {
-        if (line == "")
-            continue
-        if (InStr(line, "@@BLOCK@@")) {
-            result.Push(line)
-            continue
-        }
-        
-        if (RegExMatch(line, "^.+時\s*$")) {
-            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
-                result[result.Length] .= line
-            else
-                result.Push(line)
-        } 
-        else if (RegExMatch(line, "^分\d+\s+\d")) {
-            line := RegExReplace(line, "^(分\d+)\s+(\d)", "$1@@SPACE@@$2")
-            result.Push(line)
-        } 
-        else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
-            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
-                result[result.Length] .= "@@SPACE@@" . m[1]
-            else
-                result.Push("@@SPACE@@" . m[1])
-        } 
-        else {
-            result.Push(line)
-        }
-    }
-    finalText := ""
-    for l in result
-        finalText .= l "`n"
-    return finalText
-}
-
-FinalizeText(text) {
-    text := StrReplace(text, "@@SPACE@@", " ")
-    text := RegExReplace(text, "\(\Sとして\)", "")
-    text := StrReplace(text, "(非持参)", "")
-    return Trim(text, "`n`r")
-}
-
-ReorganizeByTrigger(text) {
-    blocks := []
-    currentBlock := []
-    lines := StrSplit(text, "`n", "`r")
-    for line in lines {
-        if (RegExMatch(line, "^処方日")) {
-            if (currentBlock.Length > 0)
-                blocks.Push(currentBlock)
-            currentBlock := []
-        } else if (line != "") {
-            currentBlock.Push(line)
-        }
-    }
-    if (currentBlock.Length > 0)
-        blocks.Push(currentBlock)
-
-    finalOutput := ""
-    for blockLines in blocks {
-        triggerCount := 0
-        for l in blockLines {
-            if (InStr(l, "@@SPACE@@"))
-                triggerCount++
-        }
-        buffer := ""
-        for line in blockLines {
-            if (InStr(line, "@@SPACE@@")) {
-                outLine := buffer . line
-                if (triggerCount > 1)
-                    outLine .= "@@BLOCK@@"
-                finalOutput .= outLine "`n"
-                buffer := ""
-            } else {
-                if (!InStr(line, " ")) {
-                    buffer .= line
-                } else {
-                    if (triggerCount > 1)
-                        line .= "@@BLOCK@@"
-                    finalOutput .= line "`n"
-                }
-            }
-        }
-        if (buffer != "")
-            finalOutput .= buffer . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
-    }
-    return finalOutput
-}
-
-FilterOutpatientOrder(text) {
-    lines := StrSplit(text, "`n", "`r")
-    result := ""
-    for line in lines {
-        if (line == "" || RegExMatch(line, "^(--|<R|処方箋)"))
-            continue
-        result .= line "`n"
-    }
-    return result
-}
-
-ProcessInitialInput() {
-    savedClip := A_Clipboard
-    A_Clipboard := ""
-    Send("^c")
-    if !ClipWait(0.5)
-        A_Clipboard := savedClip
-    return ConvertToHalfWidth(A_Clipboard)
-}
-
-ConvertToHalfWidth(str) {
-    size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
-    buf := Buffer(size * 2)
-    DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
-    return StrGet(buf, "UTF-16")
-}
+    ; 単位のマーキング (否定先読みで「外)」を含む行を除
