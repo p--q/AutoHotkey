@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.ahk
-; Version: 6.5
-; Description: 処方整形 (AHK v2) - v6.0ベースで「外)」行の除外ロジックを統合
+; File: PrescriptionFormatter_v6.6.ahk
+; Version: 6.6
+; Description: 処方整形 (AHK v2) - 最終調整：重複する「枚」表示の整理
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -94,8 +94,7 @@ ApplyBasicFormatting(text) {
     text := StrReplace(text, "吸入用", "")
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
 
-    ; v6.0のロジックに「外)」除外条件を追加
-    ; 行頭から「外)」を含まない行のみ、末尾の数量に @@SPACE@@ を付与する
+    ; 行頭から「外)」を含まない行のみ、末尾の数量に @@SPACE@@ を付与
     text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*外\)).*?(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
@@ -137,6 +136,11 @@ MergeSpecificPatterns(text) {
 
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
+    
+    ; 追加：数量（枚）と用法（1日n枚）が重複した場合、後半の用法のみ残す
+    ; 例: 「7枚 1日1枚」 -> 「1日1枚」
+    text := RegExReplace(text, "\d+枚\s(1日\d+枚)", "$1")
+    
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
     return Trim(text, "`n`r")
