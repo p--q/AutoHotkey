@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.1.ahk
-; Version: 6.5.1
-; Description: 処方整形 (AHK v2) - 「〜として」の改行跨ぎ削除をApplyBasicFormattingへ移動
+; File: PrescriptionFormatter_v6.5.2.ahk
+; Version: 6.5.2
+; Description: 処方整形 (AHK v2) - 「\d+\S+分$」の削除ロジックを追加
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -90,11 +90,15 @@
 ; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
-    ; ご要望の修正：改行を跨いで「〜として」のカッコ内を削除
+    ; 「〜として」のカッコ内を削除（改行跨ぎ対応）
     text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
     
+    ; 追加：行末の「7日分」「14日分」などを削除
+    ; m)オプションで各行の行末を判定します
+    text := RegExReplace(text, "m)\d+\S+分$", "")
+    
     text := StrReplace(text, "吸入用", "")
-    ; シンプルなマーカー付与
+    ; 数量マーカー付与
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -133,7 +137,6 @@ MergeSpecificPatterns(text) {
 
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
-    ; ここから「〜として」の削除行を撤去しました
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
     text := RegExReplace(text, " +", " ")
