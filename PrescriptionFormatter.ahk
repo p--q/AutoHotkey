@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.8.8.ahk
-; Version: 6.8.8
-; Description: 処方整形 (AHK v2) - 出力欠落回避のため分割提示【前半】
+; File: PrescriptionFormatter_v6.8.9.ahk
+; Version: 6.8.9
+; Description: 処方整形 (AHK v2) - 小数点(0.5錠など)の消失を防止する修正
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -91,14 +91,28 @@
 
 ApplyBasicFormatting(text) {
     text := StrReplace(text, "吸入用", "")
+    
+    ; 1. 単位の泣き別れを修復 (500m\ng)
     text := RegExReplace(text, "(\d+)m\s*\r?\n\s*g", "$1mg")
+    
+    ; 2. 【重要】小数点を含む数値を一時的に保護 (薬品名結合ロジックによる破壊を防止)
+    text := RegExReplace(text, "(\d)\.(\d)", "$1@@DOT@@$2")
+    
+    ; 3. カタカナ薬品名の泣き別れを修復
     text := RegExReplace(text, "([ァ-ヶ])\s*\r?\n\s*([ァ-ヶ])", "$1$2")
+    
+    ; 4. 括弧内の改行を修復
     text := RegExReplace(text, "\(([^)]*)\s*\r?\n\s*([^)]*)\)", "($1$2)")
+    
+    ; 用法末尾の「分」を保護
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
     
-    ; 101行目付近：ここが途切れないよう正確に記述
+    ; 数量マーカー付与
     unitPattern := "(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$"
     text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*(?:外\)|日分))(?=.*" . unitPattern . ").*?\K" . unitPattern, "@@SPACE@@$1")
+    
+    ; 保護した小数点を戻す
+    text := StrReplace(text, "@@DOT@@", ".")
     
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -129,10 +143,10 @@ MergeSpecificPatterns(text) {
             result.Push(line)
         }
     }
-    finalText := ""
+    finalOutput := ""
     for l in result
-        finalText .= l "`n"
-    return finalText
+        finalOutput .= l "`n"
+    return finalOutput
 }
 
 FinalizeText(text) {
@@ -213,6 +227,7 @@ ProcessInitialInput() {
 }
 
 ConvertToHalfWidth(str) {
+    ; Windows APIで全角を半角へ変換
     size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
     DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
