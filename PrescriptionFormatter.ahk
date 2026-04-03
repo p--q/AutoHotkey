@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v5.7.ahk
-; Version: 5.7
-; Description: 処方整形 (AHK v2) - 関数定義漏れ(ProcessInitialInput)修正版
+; File: PrescriptionFormatter_v5.8.ahk
+; Version: 5.8
+; Description: 処方整形 (AHK v2) - 判定ロジックの適正化(回分削除済み対応)
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -56,7 +56,8 @@
         if (line == "")
             continue
 
-        if (RegExMatch(line, "^(分\d|1日\d回|\d回分)")) {
+        ; 用法判定 (分n, 1日n回) ※回分はApplyBasicFormattingで削除済み
+        if (RegExMatch(line, "^(分\d|1日\d回)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
@@ -68,7 +69,8 @@
             
             prevLine := (processedLines.Length > 0) ? processedLines[processedLines.Length] : ""
             
-            if (!isBlock && processedLines.Length > 0 && !RegExMatch(prevLine, "(時|回分)$")) {
+            ; 直前が「時」で終わる場合は結合しない。それ以外は結合。
+            if (!isBlock && processedLines.Length > 0 && !RegExMatch(prevLine, "時$")) {
                 processedLines[processedLines.Length] .= line
             } else {
                 processedLines.Push(line)
@@ -90,7 +92,9 @@
 ; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
+    ; 用法末尾の「分/日分」を先に削除
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
+    ; 単位のマーキング
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -106,7 +110,9 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-        if (RegExMatch(line, "^.+時$") || RegExMatch(line, "^.+時.*?\d+回分$")) {
+        
+        ; 修正：回分は削除済みなので「時」のみを判定
+        if (RegExMatch(line, "^.+時$")) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= line
             else
@@ -152,6 +158,7 @@ ReorganizeByTrigger(text) {
     }
     if (currentBlock.Length > 0)
         blocks.Push(currentBlock)
+
     finalOutput := ""
     for blockLines in blocks {
         triggerCount := 0
@@ -194,7 +201,6 @@ FilterOutpatientOrder(text) {
     return result
 }
 
-; 修正箇所: 関数名を明記
 ProcessInitialInput() {
     savedClip := A_Clipboard
     A_Clipboard := ""
