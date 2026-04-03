@@ -1,8 +1,8 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.6.ahk
-; Version: 6.5.6
-; Description: トリガー定義の厳密化と全関数の再集約。
-;              薬品名の泣き別れを完全に防ぎ、外用薬の最終置換を全キーで実行。
+; File: PrescriptionFormatter_v6.5.8.ahk
+; Version: 6.5.8
+; Description: \S* の欲張り一致によるマッチ失敗を修正。
+;              1cap 等の行を確実にトリガーとして認識し、薬品名の泣き別れを結合。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -29,10 +29,7 @@
         }
         text := RegExReplace(result, "[ \t]+", "")
         text := FinalizeText(text)
-        
-        ; 外用薬の最終置換
         text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\d+枚)$", " $1")
-        
         A_Clipboard := text
         ToolTip("整形完了(用法なし)")
     }
@@ -88,8 +85,6 @@
         text .= line "`n"
         
     text := FinalizeText(text)
-    
-    ; 外用薬の最終置換
     text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\d+枚)$", " $1")
     
     A_Clipboard := text
@@ -102,13 +97,13 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
     text := RegExReplace(text, "m)\d+\S+分$", "")
     text := StrReplace(text, "吸入用", "")
-    ; トリガー定義: \d+\S*[錠p枚ﾄ]$ または \s\d+\S*g$
-    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
+    ; 修正：\S*? (非欲張り一致) にすることで末尾文字 [錠p枚ﾄ] を確実に残す
+    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*?([錠p枚ﾄ]|cap)$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
 
-; --- 共通関数: 処方日トリガーによるブロック整理 ---
+; --- 共通関数: ブロック整理 ---
 ReorganizeByTrigger(text) {
     blocks := []
     currentBlock := []
@@ -136,18 +131,13 @@ ReorganizeByTrigger(text) {
         buffer := ""
         for line in blockLines {
             if (InStr(line, "@@SPACE@@")) {
-                outLine := buffer . line
-                if (triggerCount > 1)
-                    outLine .= "@@BLOCK@@"
-                finalOutput .= outLine "`n"
+                finalOutput .= buffer . line . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
                 buffer := ""
             } else {
                 if (!InStr(line, " ") && !InStr(line, "　")) {
                     buffer .= line
                 } else {
-                    if (triggerCount > 1)
-                        line .= "@@BLOCK@@"
-                    finalOutput .= line "`n"
+                    finalOutput .= line . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
                 }
             }
         }
@@ -157,7 +147,7 @@ ReorganizeByTrigger(text) {
     return finalOutput
 }
 
-; --- 共通関数: 外用薬指示や特殊な用法行の結合 ---
+; --- 共通関数: 結合ロジック ---
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
@@ -190,7 +180,6 @@ MergeSpecificPatterns(text) {
     return finalOutput
 }
 
-; --- 共通関数: 最終仕上げ ---
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     text := StrReplace(text, "@@BLOCK@@", "")
@@ -200,7 +189,6 @@ FinalizeText(text) {
     return Trim(text, "`n`r")
 }
 
-; --- 共通関数: 外来オーダ形式の不要行フィルタ ---
 FilterOutpatientOrder(text) {
     lines := StrSplit(text, "`n", "`r")
     result := ""
@@ -212,7 +200,6 @@ FilterOutpatientOrder(text) {
     return result
 }
 
-; --- 共通関数: 入力処理 ---
 ProcessInitialInput() {
     savedClip := A_Clipboard
     A_Clipboard := ""
@@ -222,7 +209,6 @@ ProcessInitialInput() {
     return ConvertToHalfWidth(A_Clipboard)
 }
 
-; --- 共通関数: 全角半角変換 (WinAPI利用) ---
 ConvertToHalfWidth(str) {
     size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
