@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v5.9.ahk
-; Version: 5.9
-; Description: 処方整形 (AHK v2) - 「時」判定の末尾空白許容修正版
+; File: PrescriptionFormatter_v6.0.ahk
+; Version: 6.0
+; Description: 処方整形 (AHK v2) - 「外)」行の結合処理修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -68,7 +68,6 @@
             
             prevLine := (processedLines.Length > 0) ? processedLines[processedLines.Length] : ""
             
-            ; 修正：直前が「時」で終わる（空白許容）場合は結合しない
             if (!isBlock && processedLines.Length > 0 && !RegExMatch(prevLine, "時\s*$")) {
                 processedLines[processedLines.Length] .= line
             } else {
@@ -108,21 +107,26 @@ MergeSpecificPatterns(text) {
             continue
         }
         
-        ; 修正：末尾の空白を許容する判定に変更
+        ; 1. 「時」で終わる行の結合
         if (RegExMatch(line, "^.+時\s*$")) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= line
             else
                 result.Push(line)
-        } else if (RegExMatch(line, "^分\d+\s\d")) {
-            line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
+        } 
+        ; 2. 「分n 数量」の形式をスペース区切りに（@@SPACE@@に置換）
+        else if (RegExMatch(line, "^分\d+\s+\d")) {
+            line := RegExReplace(line, "^(分\d+)\s+(\d)", "$1@@SPACE@@$2")
             result.Push(line)
-        } else if (RegExMatch(line, "^外\)\s(.*)$", &m)) {
+        } 
+        ; 3. 「外) 」で始まる行を上の行に結合
+        else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= "@@SPACE@@" . m[1]
             else
                 result.Push("@@SPACE@@" . m[1])
-        } else {
+        } 
+        else {
             result.Push(line)
         }
     }
