@@ -1,8 +1,8 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.4.ahk
-; Version: 6.5.4
-; Description: v6.5.2ベース。薬品名や規格内の改行結合を強化。
-;              S/Dキー共にFinalizeText後に外用薬の数量置換を実行。
+; File: PrescriptionFormatter_v6.5.5.ahk
+; Version: 6.5.5
+; Description: 薬品名結合ロジックを以前の安定した挙動に復元。
+;              S/D両キーで、FinalizeText直後に外用薬の数量置換を実行。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -106,6 +106,7 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
+; --- 共通関数: 外用薬指示や特殊な用法行の結合 ---
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
@@ -138,6 +139,7 @@ MergeSpecificPatterns(text) {
     return finalOutput
 }
 
+; --- 共通関数: 最終仕上げ ---
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     text := StrReplace(text, "@@BLOCK@@", "")
@@ -147,6 +149,7 @@ FinalizeText(text) {
     return Trim(text, "`n`r")
 }
 
+; --- 共通関数: 処方日トリガーによるブロック整理 ---
 ReorganizeByTrigger(text) {
     blocks := []
     currentBlock := []
@@ -173,15 +176,16 @@ ReorganizeByTrigger(text) {
         buffer := ""
         for line in blockLines {
             if (InStr(line, "@@SPACE@@")) {
+                ; 数量(@@SPACE@@)がある行を見つけたら、溜めていたバッファと結合して出力
                 outLine := buffer . line
                 if (triggerCount > 1)
                     outLine .= "@@BLOCK@@"
                 finalOutput .= outLine "`n"
                 buffer := ""
             } else {
-                ; 改行対策: スペースがない、または特定の記号(「」等)や、
-                ; 規格の数字の続きと思われる行(00mgなど)を強力にバッファへ溜める
-                if (!InStr(line, " ") || RegExMatch(line, "^[「『(（0-9]")) {
+                ; 以前の強力なロジックを復元: 
+                ; 半角・全角スペースを一切含まない行は、無条件で薬品名の断片とみなす
+                if (!InStr(line, " ") && !InStr(line, "　")) {
                     buffer .= line
                 } else {
                     if (triggerCount > 1)
@@ -196,6 +200,7 @@ ReorganizeByTrigger(text) {
     return finalOutput
 }
 
+; --- 共通関数: 外来オーダ形式の不要行フィルタ ---
 FilterOutpatientOrder(text) {
     lines := StrSplit(text, "`n", "`r")
     result := ""
@@ -207,6 +212,7 @@ FilterOutpatientOrder(text) {
     return result
 }
 
+; --- 共通関数: 入力処理 ---
 ProcessInitialInput() {
     savedClip := A_Clipboard
     A_Clipboard := ""
@@ -216,6 +222,7 @@ ProcessInitialInput() {
     return ConvertToHalfWidth(A_Clipboard)
 }
 
+; --- 共通関数: 全角半角変換 (WinAPI利用) ---
 ConvertToHalfWidth(str) {
     size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
