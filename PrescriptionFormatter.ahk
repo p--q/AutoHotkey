@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v5.2.ahk
-; Version: 5.2
-; Description: 処方整形 (AHK v2) - 予約語(continue)構文エラー修正版
+; File: PrescriptionFormatter_v5.3.ahk
+; Version: 5.3
+; Description: 処方整形 (AHK v2) - 関数定義漏れ・構文エラー修正完了版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -53,7 +53,6 @@
     processedLines := []
     
     for line in lines {
-        ; 修正箇所: continue を改行して記述
         if (line == "")
             continue
 
@@ -98,6 +97,7 @@ ApplyBasicFormatting(text) {
     return text
 }
 
+; 修正箇所: 関数名 MergeSpecificPatterns(text) を復旧
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
@@ -130,3 +130,88 @@ MergeSpecificPatterns(text) {
     for l in result
         finalText .= l "`n"
     return finalText
+}
+
+FinalizeText(text) {
+    text := StrReplace(text, "@@SPACE@@", " ")
+    text := RegExReplace(text, "\(\Sとして\)", "")
+    text := StrReplace(text, "(非持参)", "")
+    text := RegExReplace(text, "吸入用", "")
+    return Trim(text, "`n`r")
+}
+
+ReorganizeByTrigger(text) {
+    blocks := []
+    currentBlock := []
+    lines := StrSplit(text, "`n", "`r")
+    
+    for line in lines {
+        if (RegExMatch(line, "^処方日")) {
+            if (currentBlock.Length > 0)
+                blocks.Push(currentBlock)
+            currentBlock := []
+        } else if (line != "") {
+            currentBlock.Push(line)
+        }
+    }
+    if (currentBlock.Length > 0)
+        blocks.Push(currentBlock)
+
+    finalOutput := ""
+    for blockLines in blocks {
+        triggerCount := 0
+        for l in blockLines {
+            if (InStr(l, "@@SPACE@@"))
+                triggerCount++
+        }
+
+        buffer := ""
+        for line in blockLines {
+            if (InStr(line, "@@SPACE@@")) {
+                outLine := buffer . line
+                if (triggerCount > 1)
+                    outLine .= "@@BLOCK@@"
+                finalOutput .= outLine "`n"
+                buffer := ""
+            } else {
+                if (!InStr(line, " ")) {
+                    buffer .= line
+                } else {
+                    if (triggerCount > 1)
+                        line .= "@@BLOCK@@"
+                    finalOutput .= line "`n"
+                }
+            }
+        }
+        if (buffer != "")
+            finalOutput .= buffer . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
+    }
+    return finalOutput
+}
+
+FilterOutpatientOrder(text) {
+    lines := StrSplit(text, "`n", "`r")
+    result := ""
+    for line in lines {
+        if (line == "" || RegExMatch(line, "^(--|<R|処方箋)"))
+            continue
+        result .= line "`n"
+    }
+    return result
+}
+
+ProcessInitialInput() {
+    savedClip := A_Clipboard
+    A_Clipboard := ""
+    Send("^c")
+    if !ClipWait(0.5)
+        A_Clipboard := savedClip
+    return ConvertToHalfWidth(A_Clipboard)
+}
+
+ConvertToHalfWidth(str) {
+    size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
+    buf := Buffer(size * 2)
+    DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
+    return StrGet(buf, "UTF-16")
+}
