@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.0.ahk
-; Version: 6.0
-; Description: 処方整形 (AHK v2) - 「外)」行の結合処理修正版
+; File: PrescriptionFormatter_v6.1.ahk
+; Version: 6.1
+; Description: 処方整形 (AHK v2) - 単位「枚」「ｷｯﾄ」追加・外)結合強化版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -56,7 +56,8 @@
         if (line == "")
             continue
 
-        if (RegExMatch(line, "^(分\d|1日\d回)")) {
+        ; 用法判定 (分n, 1日n回, 1日n枚)
+        if (RegExMatch(line, "^(分\d|1日\d回|1日\d枚)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
@@ -90,8 +91,12 @@
 ; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
+    ; 吸入用を先に削除して位置ズレを防ぐ
+    text := StrReplace(text, "吸入用", "")
+    ; 用法末尾の「分/日分」を削除
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
+    ; 単位のマーキング（枚、ｷｯﾄ、錠、g 等）
+    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
@@ -114,18 +119,17 @@ MergeSpecificPatterns(text) {
             else
                 result.Push(line)
         } 
-        ; 2. 「分n 数量」の形式をスペース区切りに（@@SPACE@@に置換）
-        else if (RegExMatch(line, "^分\d+\s+\d")) {
-            line := RegExReplace(line, "^(分\d+)\s+(\d)", "$1@@SPACE@@$2")
-            result.Push(line)
-        } 
-        ; 3. 「外) 」で始まる行を上の行に結合
+        ; 2. 「外) 」で始まる行、またはその継続行と思われるものを上の行に結合
         else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= "@@SPACE@@" . m[1]
             else
                 result.Push("@@SPACE@@" . m[1])
-        } 
+        }
+        ; レルベア等の「タに吸入」のような外用指示の残党を拾う
+        else if (result.Length > 0 && InStr(result[result.Length], "@@SPACE@@") && !RegExMatch(line, "@@SPACE@@") && !RegExMatch(line, "^処方日")) {
+             result[result.Length] .= line
+        }
         else {
             result.Push(line)
         }
@@ -140,7 +144,6 @@ FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
-    text := RegExReplace(text, "吸入用", "")
     return Trim(text, "`n`r")
 }
 
