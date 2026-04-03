@@ -1,7 +1,8 @@
 ; ==============================================================================
 ; File: PrescriptionFormatter_v6.5.3.ahk
 ; Version: 6.5.3
-; Description: v6.5.2ベース。FinalizeText後の最終置換ロジックを追加。
+; Description: v6.5.2ベース。Sキー・Dキー共に、FinalizeText実行後の最終文字列
+;              に対して外用薬の数量を消去し用法を結合する置換を実行。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -27,7 +28,14 @@
             }
         }
         text := RegExReplace(result, "[ \t]+", "")
+        
+        ; --- 仕上げ処理 ---
         text := FinalizeText(text)
+        
+        ; 【ご依頼の修正】Sキー時もFinalizeTextの直後に置換を実行
+        ; 数量（枚）と用法（1日X枚）が改行で並んでいる場合に結合
+        text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\d+枚)$", " $1")
+        
         A_Clipboard := text
         ToolTip("整形完了(用法なし)")
     }
@@ -83,11 +91,10 @@
     for line in processedLines
         text .= line "`n"
         
-    ; 1. まず通常の整形を完了させる
+    ; --- 仕上げ処理 ---
     text := FinalizeText(text)
 
-    ; 2. 【ご指定の修正】FinalizeTextの「後」に置換を実行
-    ; 改行コードは \R (または \r?\n) を使用し、外) も含めて置換します
+    ; 【ご依頼の修正】Dキー時もFinalizeTextの直後に置換を実行
     text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\d+枚)$", " $1")
     
     A_Clipboard := text
@@ -181,7 +188,6 @@ ReorganizeByTrigger(text) {
                 finalOutput .= outLine "`n"
                 buffer := ""
             } else {
-                ; スペースが含まれていても、特定の記号で始まる行（メーカー名など）はバッファに貯める
                 if (!InStr(line, " ") || RegExMatch(line, "^[「『(（]")) {
                     buffer .= line
                 } else {
