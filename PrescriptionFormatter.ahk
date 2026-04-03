@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.8.1.ahk
-; Version: 6.8.1
-; Description: 処方整形 (AHK v2) - 構文エラー修正(DllCallの閉じ漏れ解消)
+; File: PrescriptionFormatter_v6.8.2.ahk
+; Version: 6.8.2
+; Description: 処方整形 (AHK v2) - 構文エラー修正(RegExReplaceの引用符漏れ解消)
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -91,9 +91,12 @@
 
 ApplyBasicFormatting(text) {
     text := StrReplace(text, "吸入用", "")
+    ; 薬品名内の不自然な改行修復
     text := RegExReplace(text, "(\d+)m\s*\r?\n\s*g", "$1mg")
     text := RegExReplace(text, "([ァ-ヶ])\s*\r?\n\s*([ァ-ヶ])", "$1$2")
     text := RegExReplace(text, "\(([^)]*)\s*\r?\n\s*([^)]*)\)", "($1$2)")
+    
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-    unitPattern := "(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$"
-    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*(?:外\
+    
+    ; 修正済み: 引用符と条件を正確に記述
+    unitPattern := "(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$
