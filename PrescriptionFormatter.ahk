@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v5.6.ahk
-; Version: 5.6
-; Description: 処方整形 (AHK v2) - 構文エラー(Line 221) 修正版
+; File: PrescriptionFormatter_v5.7.ahk
+; Version: 5.7
+; Description: 処方整形 (AHK v2) - 関数定義漏れ(ProcessInitialInput)修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -194,8 +194,19 @@ FilterOutpatientOrder(text) {
     return result
 }
 
+; 修正箇所: 関数名を明記
 ProcessInitialInput() {
     savedClip := A_Clipboard
     A_Clipboard := ""
     Send("^c")
-    if !
+    if !ClipWait(0.5)
+        A_Clipboard := savedClip
+    return ConvertToHalfWidth(A_Clipboard)
+}
+
+ConvertToHalfWidth(str) {
+    size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
+    buf := Buffer(size * 2)
+    DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
+    return StrGet(buf, "UTF-16")
+}
