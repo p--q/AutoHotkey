@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v4.7.ahk
-; Version: 4.7
-; Description: 処方整形スクリプト (AHK v2) - 単位判定ロジック修正版
+; File: PrescriptionFormatter_v4.8.ahk
+; Version: 4.8
+; Description: 処方整形スクリプト (AHK v2) - 関数D境界制限・(非持参)削除修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -23,7 +23,6 @@
         lines := StrSplit(text, "`n", "`r")
         result := ""
         for line in lines {
-            ; 修正された正規表現を適用
             if (RegExMatch(line, "(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)")) {
                 line := RegExReplace(line, "(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
                 line := RegExReplace(line, "cap$", "c")
@@ -92,7 +91,6 @@
 
 ApplyBasicFormatting(text) {
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-    ; 修正された正規表現を適用
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -105,7 +103,8 @@ MergeSpecificPatterns(text) {
         if (line == "")
             continue
 
-        if (RegExMatch(line, "^\S+時$")) {
+        ; 修正：\S（空白以外）から .+（空白含む）へ変更し、行末が「時」なら結合
+        if (RegExMatch(line, "^.+時$")) {
             if (result.Length > 0)
                 result[result.Length] .= line
             else
@@ -133,7 +132,8 @@ MergeSpecificPatterns(text) {
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     text := RegExReplace(text, "\(\Sとして\)", "")
-    text := StrReplace(text, "(非持参", "")
+    ; 修正：(非持参) を正確に削除
+    text := StrReplace(text, "(非持参)", "")
     return Trim(text, "`n`r")
 }
 
@@ -157,16 +157,24 @@ ProcessInitialInput() {
     return ConvertToHalfWidth(A_Clipboard)
 }
 
-; 【関数D】トリガー条件の修正
+; 【関数D】処方日をまたがないように修正
 ReorganizeByTrigger(text) {
     lines := StrSplit(text, "`n", "`r")
     newOutput := ""
     buffer := ""
     for line in lines {
-        if (RegExMatch(line, "^処方日") || line == "")
+        ; 修正：処方日から始まる行に遭遇したら、そこまでのバッファを放出してリセット
+        if (RegExMatch(line, "^処方日")) {
+            if (buffer != "") {
+                newOutput .= buffer "`n"
+                buffer := ""
+            }
+            continue
+        }
+        
+        if (line == "")
             continue
         
-        ; 修正された正規表現を適用
         if (RegExMatch(line, "(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)")) {
             newOutput .= buffer . line . "`n"
             buffer := ""
@@ -177,7 +185,8 @@ ReorganizeByTrigger(text) {
                 newOutput .= line . "`n"
         }
     }
-    return newOutput . buffer
+    ; 最後に残ったバッファがあれば出力
+    return newOutput . (buffer != "" ? buffer "`n" : "")
 }
 
 ConvertToHalfWidth(str) {
