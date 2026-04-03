@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.6.ahk
-; Version: 6.6
-; Description: 処方整形 (AHK v2) - 最終調整：重複する「枚」表示の整理
+; File: PrescriptionFormatter_v6.8.ahk
+; Version: 6.8
+; Description: 処方整形 (AHK v2) - 薬品名内改行修復 ＆ 用法行(日分)のトリガー除外
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -92,10 +92,22 @@
 
 ApplyBasicFormatting(text) {
     text := StrReplace(text, "吸入用", "")
+    
+    ; --- 薬品名内の不自然な改行修復 ---
+    ; 1. 単位の途中で切れたもの (500m\ng) を結合
+    text := RegExReplace(text, "(\d+)m\s*\r?\n\s*g", "$1mg")
+    ; 2. 薬品名(カタカナ)の途中で切れたものを結合
+    text := RegExReplace(text, "([ァ-ヶ])\s*\r?\n\s*([ァ-ヶ])", "$1$2")
+    ; 3. 括弧書き内の改行を修復
+    text := RegExReplace(text, "\(([^)]*)\s*\r?\n\s*([^)]*)\)", "($1$2)")
+    
+    ; 用法末尾の「分/日分」を一時的に保護するための処理
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
 
-    ; 行頭から「外)」を含まない行のみ、末尾の数量に @@SPACE@@ を付与
-    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*外\)).*?(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
+    ; 数量マーカー付与ロジック
+    ; 否定先読み (?!.*(?:外\)|日分)) により、「外)」や「日分」を含む行をトリガーから除外
+    unitPattern := "(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$"
+    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*(?:外\)|日分))(?=.*" . unitPattern . ").*?\K" . unitPattern, "@@SPACE@@$1")
     
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -137,12 +149,17 @@ MergeSpecificPatterns(text) {
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     
-    ; 追加：数量（枚）と用法（1日n枚）が重複した場合、後半の用法のみ残す
-    ; 例: 「7枚 1日1枚」 -> 「1日1枚」
+    ; 数量と用法の「枚」重複を整理
     text := RegExReplace(text, "\d+枚\s(1日\d+枚)", "$1")
     
+    ; 「(レボフロキサシンとして)」等の注釈および括弧内の残骸を削除
+    text := RegExReplace(text, "\([^)]+として\)", "")
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
+    
+    ; 余分なスペースの掃除
+    text := RegExReplace(text, " +", " ")
+    
     return Trim(text, "`n`r")
 }
 
@@ -178,6 +195,7 @@ ReorganizeByTrigger(text) {
                 finalOutput .= outLine "`n"
                 buffer := ""
             } else {
+                ; スペース（区切り）がない行を薬品名の一部として溜める
                 if (!InStr(line, " ")) {
                     buffer .= line
                 } else {
@@ -216,6 +234,4 @@ ProcessInitialInput() {
 ConvertToHalfWidth(str) {
     size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
-    DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
-    return StrGet(buf, "UTF-16")
-}
+    DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x0040000
