@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.3.ahk
+; File: PrescriptionFormatter_v6.5.3_Fixed.ahk
 ; Version: 6.5.3
-; Description: 処方整形 (AHK v2) - 外用薬のメーカー名泣き別れを解消
+; Description: 処方整形 (AHK v2) - 外用薬結合ロジックをFinalizeText直前に配置
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -79,9 +79,15 @@
         }
     }
     
+    ; 全ての行処理が終わった後の文字列
     text := ""
     for line in processedLines
         text .= line "`n"
+    
+    ; --- 外用薬の最終行結合ロジック (FinalizeTextの直前) ---
+    ; ここで @@SPACE@@ を含んだ状態の「 7枚（改行）1日1枚」を「 1日1枚」へ置換します
+    ; @@SPACE@@ は FinalizeText で半角スペースに変わるため、ここではそのままでマッチさせます
+    text := RegExReplace(text, "s)@@SPACE@@\d+枚\r?\n(1日\d+枚)$", " $1")
         
     A_Clipboard := FinalizeText(text)
     ToolTip("整形完了(用法あり)")
@@ -93,7 +99,6 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
     text := RegExReplace(text, "m)\d+\S+分$", "")
     text := StrReplace(text, "吸入用", "")
-    ; 数量マーカー(@@SPACE@@)の付与
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -175,7 +180,6 @@ ReorganizeByTrigger(text) {
                 finalOutput .= outLine "`n"
                 buffer := ""
             } else {
-                ; 修正ポイント: スペースを含んでいても、「」や()などのメーカー名表記であればバッファに溜める
                 if (!InStr(line, " ") || RegExMatch(line, "^[「『(（]")) {
                     buffer .= line
                 } else {
