@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.1.ahk
-; Version: 6.1
-; Description: 処方整形 (AHK v2) - 単位「枚」「ｷｯﾄ」追加・外)結合強化版
+; File: PrescriptionFormatter_v6.2.ahk
+; Version: 6.2
+; Description: 処方整形 (AHK v2) - 薬品名/メーカー名分離行の結合・単位判定修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -91,12 +91,11 @@
 ; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
-    ; 吸入用を先に削除して位置ズレを防ぐ
     text := StrReplace(text, "吸入用", "")
     ; 用法末尾の「分/日分」を削除
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-    ; 単位のマーキング（枚、ｷｯﾄ、錠、g 等）
-    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$", "@@SPACE@@$1")
+    ; 単位のマーキング（直前に空白があってもなくてもマッチするように修正）
+    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*(?:錠|p|枚|ﾄ|g|c|ｷｯﾄ))$", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
@@ -107,11 +106,12 @@ MergeSpecificPatterns(text) {
     for line in lines {
         if (line == "")
             continue
+            
         if (InStr(line, "@@BLOCK@@")) {
             result.Push(line)
             continue
         }
-        
+
         ; 1. 「時」で終わる行の結合
         if (RegExMatch(line, "^.+時\s*$")) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
@@ -119,15 +119,24 @@ MergeSpecificPatterns(text) {
             else
                 result.Push(line)
         } 
-        ; 2. 「外) 」で始まる行、またはその継続行と思われるものを上の行に結合
+        ; 2. 数量(@@SPACE@@)を含む行の場合の処理
+        else if (InStr(line, "@@SPACE@@")) {
+            ; 前の行が薬品名（数量を含まない）であれば結合する
+            if (result.Length > 0 && !InStr(result[result.Length], "@@SPACE@@") && !RegExMatch(result[result.Length], "^処方日")) {
+                result[result.Length] .= line
+            } else {
+                result.Push(line)
+            }
+        }
+        ; 3. 「外) 」で始まる行を結合
         else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= "@@SPACE@@" . m[1]
             else
                 result.Push("@@SPACE@@" . m[1])
         }
-        ; レルベア等の「タに吸入」のような外用指示の残党を拾う
-        else if (result.Length > 0 && InStr(result[result.Length], "@@SPACE@@") && !RegExMatch(line, "@@SPACE@@") && !RegExMatch(line, "^処方日")) {
+        ; 4. 用法やその他の指示行を薬品行に結合
+        else if (result.Length > 0 && InStr(result[result.Length], "@@SPACE@@") && !RegExMatch(line, "^処方日")) {
              result[result.Length] .= line
         }
         else {
@@ -141,7 +150,10 @@ MergeSpecificPatterns(text) {
 }
 
 FinalizeText(text) {
+    ; 変換プロセスの最後に残った@@SPACE@@を半角スペースに
     text := StrReplace(text, "@@SPACE@@", " ")
+    ; 薬品名と数量の間の意図しない二重スペースなどを掃除
+    text := RegExReplace(text, " +", " ")
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
     return Trim(text, "`n`r")
