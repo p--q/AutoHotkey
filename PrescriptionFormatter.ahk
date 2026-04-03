@@ -1,8 +1,8 @@
 ; ==============================================================================
 ; File: PrescriptionFormatter_v6.5.6.ahk
 ; Version: 6.5.6
-; Description: トリガー行の定義を「錠p枚ﾄ$」または「\s\d+g$」に厳密化。
-;              薬品名泣き別れを確実に防ぎ、外用薬の最終置換を完遂する。
+; Description: トリガー定義の厳密化と全関数の再集約。
+;              薬品名の泣き別れを完全に防ぎ、外用薬の最終置換を全キーで実行。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -23,7 +23,6 @@
         lines := StrSplit(text, "`n", "`r")
         result := ""
         for line in lines {
-            ; 数量マーカーが含まれる行のみを抽出
             if (InStr(line, "@@SPACE@@")) {
                 result .= line "`n"
             }
@@ -97,12 +96,13 @@
     ToolTip("整形完了(用法あり)")
     SetTimer(() => ToolTip(), -2000)
 }
-; --- 共通関数: 前処理 (トリガーマーカーの付与) ---
+
+; --- 共通関数: 前処理 ---
 ApplyBasicFormatting(text) {
     text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
     text := RegExReplace(text, "m)\d+\S+分$", "")
     text := StrReplace(text, "吸入用", "")
-    ; トリガー定義: \d+\S*[錠p枚ﾄ]$ または \s\d+\S*g$ に @@SPACE@@ を付与
+    ; トリガー定義: \d+\S*[錠p枚ﾄ]$ または \s\d+\S*g$
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -127,7 +127,6 @@ ReorganizeByTrigger(text) {
 
     finalOutput := ""
     for blockLines in blocks {
-        ; このブロック内にトリガー行(@@SPACE@@)がいくつあるかカウント
         triggerCount := 0
         for l in blockLines {
             if (InStr(l, "@@SPACE@@"))
@@ -136,16 +135,13 @@ ReorganizeByTrigger(text) {
         
         buffer := ""
         for line in blockLines {
-            ; 判定: @@SPACE@@マーカーがある行が「数量行（トリガー）」
             if (InStr(line, "@@SPACE@@")) {
                 outLine := buffer . line
                 if (triggerCount > 1)
                     outLine .= "@@BLOCK@@"
                 finalOutput .= outLine "`n"
-                buffer := "" ; 結合したのでバッファを空にする
+                buffer := ""
             } else {
-                ; マーカーがない行は「薬品名の断片」としてバッファに溜める
-                ; ただし、すでにスペースを含んでいる用法行などは除外
                 if (!InStr(line, " ") && !InStr(line, "　")) {
                     buffer .= line
                 } else {
@@ -155,12 +151,81 @@ ReorganizeByTrigger(text) {
                 }
             }
         }
-        ; 残ったバッファがあれば出力
         if (buffer != "")
             finalOutput .= buffer . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
     }
     return finalOutput
 }
 
-; 以下、MergeSpecificPatterns, FinalizeText, FilterOutpatientOrder, 
-; ProcessInitialInput, ConvertToHalfWidth は v6.5.5 と同様のため省略（ロジックに変更なし）
+; --- 共通関数: 外用薬指示や特殊な用法行の結合 ---
+MergeSpecificPatterns(text) {
+    lines := StrSplit(text, "`n", "`r")
+    result := []
+    for line in lines {
+        if (line == "")
+            continue
+        if (InStr(line, "@@BLOCK@@")) {
+            result.Push(line)
+            continue
+        }
+        if (RegExMatch(line, "^.+時\s*$")) {
+            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
+                result[result.Length] .= line
+            else
+                result.Push(line)
+        } 
+        else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
+            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
+                result[result.Length] .= "@@SPACE@@" . m[1]
+            else
+                result.Push("@@SPACE@@" . m[1])
+        } 
+        else {
+            result.Push(line)
+        }
+    }
+    finalOutput := ""
+    for l in result
+        finalOutput .= l "`n"
+    return finalOutput
+}
+
+; --- 共通関数: 最終仕上げ ---
+FinalizeText(text) {
+    text := StrReplace(text, "@@SPACE@@", " ")
+    text := StrReplace(text, "@@BLOCK@@", "")
+    text := RegExReplace(text, "\(\Sとして\)", "")
+    text := StrReplace(text, "(非持参)", "")
+    text := RegExReplace(text, " +", " ")
+    return Trim(text, "`n`r")
+}
+
+; --- 共通関数: 外来オーダ形式の不要行フィルタ ---
+FilterOutpatientOrder(text) {
+    lines := StrSplit(text, "`n", "`r")
+    result := ""
+    for line in lines {
+        if (line == "" || RegExMatch(line, "^(--|<R|処方箋)"))
+            continue
+        result .= line "`n"
+    }
+    return result
+}
+
+; --- 共通関数: 入力処理 ---
+ProcessInitialInput() {
+    savedClip := A_Clipboard
+    A_Clipboard := ""
+    Send("^c")
+    if !ClipWait(0.5)
+        A_Clipboard := savedClip
+    return ConvertToHalfWidth(A_Clipboard)
+}
+
+; --- 共通関数: 全角半角変換 (WinAPI利用) ---
+ConvertToHalfWidth(str) {
+    size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
+    buf := Buffer(size * 2)
+    DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
+    return StrGet(buf, "UTF-16")
+}
