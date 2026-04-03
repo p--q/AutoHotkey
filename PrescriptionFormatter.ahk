@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.8.6.ahk
-; Version: 6.8.6
-; Description: 処方整形 (AHK v2) - For文および中括弧の欠落を完全に修復
+; File: PrescriptionFormatter_v6.8.7.ahk
+; Version: 6.8.7
+; Description: 処方整形 (AHK v2) - 97行目のRegExReplaceおよび全構文の修復
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -94,4 +94,8 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "(\d+)m\s*\r?\n\s*g", "$1mg")
     text := RegExReplace(text, "([ァ-ヶ])\s*\r?\n\s*([ァ-ヶ])", "$1$2")
     text := RegExReplace(text, "\(([^)]*)\s*\r?\n\s*([^)]*)\)", "($1$2)")
-    text := RegExReplace(text, "m)(
+    
+    text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
+    
+    ; 修正箇所(97-102行目): 引用符を正確に閉じ、変数を完結
+    unitPattern := "(\d+\S*[錠p
