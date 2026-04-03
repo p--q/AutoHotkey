@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.8.5.ahk
-; Version: 6.8.5
-; Description: 処方整形 (AHK v2) - 118行目付近の欠落を修復した完全版
+; File: PrescriptionFormatter_v6.8.6.ahk
+; Version: 6.8.6
+; Description: 処方整形 (AHK v2) - For文および中括弧の欠落を完全に修復
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -94,27 +94,4 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "(\d+)m\s*\r?\n\s*g", "$1mg")
     text := RegExReplace(text, "([ァ-ヶ])\s*\r?\n\s*([ァ-ヶ])", "$1$2")
     text := RegExReplace(text, "\(([^)]*)\s*\r?\n\s*([^)]*)\)", "($1$2)")
-    text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-    
-    unitPattern := "(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$"
-    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*(?:外\)|日分))(?=.*" . unitPattern . ").*?\K" . unitPattern, "@@SPACE@@$1")
-    text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
-    return text
-}
-
-MergeSpecificPatterns(text) {
-    lines := StrSplit(text, "`n", "`r")
-    result := []
-    for line in lines {
-        if (line == "")
-            continue
-        if (InStr(line, "@@BLOCK@@")) {
-            result.Push(line)
-            continue
-        }
-        if (RegExMatch(line, "^.+時\s*$")) {
-            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
-                result[result.Length] .= line
-            else
-                result.Push(line)
-        }
+    text := RegExReplace(text, "m)(
