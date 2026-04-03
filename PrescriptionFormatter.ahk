@@ -1,11 +1,14 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v4.5.ahk
-; Version: 4.5
-; Description: 処方整形スクリプト (AHK v2) - 単独「時」行の結合特化版
+; File: PrescriptionFormatter_v4.7.ahk
+; Version: 4.7
+; Description: 処方整形スクリプト (AHK v2) - 単位判定ロジック修正版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
 
+; ------------------------------------------------------------------------------
+; Win + Alt + S : 用法なし出力
+; ------------------------------------------------------------------------------
 #!s:: {
     text := ProcessInitialInput()
     if (RegExMatch(text, "^商品名")) {
@@ -20,8 +23,9 @@
         lines := StrSplit(text, "`n", "`r")
         result := ""
         for line in lines {
-            if (RegExMatch(line, "\d+\S*[錠pg枚ﾄ]$")) {
-                line := RegExReplace(line, "(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
+            ; 修正された正規表現を適用
+            if (RegExMatch(line, "(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)")) {
+                line := RegExReplace(line, "(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
                 line := RegExReplace(line, "cap$", "c")
                 result .= line "`n"
             }
@@ -34,6 +38,9 @@
     SetTimer(() => ToolTip(), -2000)
 }
 
+; ------------------------------------------------------------------------------
+; Win + Alt + D : 用法あり出力
+; ------------------------------------------------------------------------------
 #!d:: {
     text := ProcessInitialInput()
     if (SubStr(text, 1, 2) == "--") {
@@ -43,9 +50,7 @@
     }
     
     text := ApplyBasicFormatting(text)
-    ; 1. 「時」だけで構成される行を上の行の末尾に結合する
     text := MergeSpecificPatterns(text)
-    
     text := RegExReplace(text, "[ \t]+", "")
     
     lines := StrSplit(text, "`n", "`r")
@@ -55,17 +60,12 @@
         if (line == "")
             continue
 
-        ; 用法としてマージすべきパターンの判定
-        ; 分n / 1日n回 / n回分 などで始まる行を結合する
-        ; ※「発熱時」は既に上の薬品行と一体化しているため、ここでは「1日3回...」の行が判定される
         if (RegExMatch(line, "^(分\d|1日\d回|\d回分)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
             line := RegExReplace(line, "\[食間\]", "")
             
-            ; ★重要★ ここで「1日3回...」がさらに上に上がるのを防ぐため、
-            ; 直前の行が「時」で終わっている場合は結合しない、という判定を入れました
             prevLine := (processedLines.Length > 0) ? processedLines[processedLines.Length] : ""
             if (processedLines.Length > 0 && !RegExMatch(prevLine, "時$")) {
                 processedLines[processedLines.Length] .= line
@@ -86,11 +86,14 @@
     SetTimer(() => ToolTip(), -2000)
 }
 
-; --- 関数群 ---
+; ------------------------------------------------------------------------------
+; 関数群
+; ------------------------------------------------------------------------------
 
 ApplyBasicFormatting(text) {
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
-    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠pg枚ﾄ]$)", "@@SPACE@@$1")
+    ; 修正された正規表現を適用
+    text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
@@ -102,14 +105,11 @@ MergeSpecificPatterns(text) {
         if (line == "")
             continue
 
-        ; 【修正の肝】行が「時」だけで終わっている場合（単独の頓服用法行）
         if (RegExMatch(line, "^\S+時$")) {
-            if (result.Length > 0) {
-                ; 直前の薬品行（1錠）のすぐ後ろに「発熱時」をくっつける
+            if (result.Length > 0)
                 result[result.Length] .= line
-            } else {
+            else
                 result.Push(line)
-            }
         } else if (RegExMatch(line, "^分\d+\s\d")) {
             line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
             result.Push(line)
@@ -124,7 +124,6 @@ MergeSpecificPatterns(text) {
             result.Push(line)
         }
     }
-    
     finalText := ""
     for l in result
         finalText .= l "`n"
@@ -158,6 +157,7 @@ ProcessInitialInput() {
     return ConvertToHalfWidth(A_Clipboard)
 }
 
+; 【関数D】トリガー条件の修正
 ReorganizeByTrigger(text) {
     lines := StrSplit(text, "`n", "`r")
     newOutput := ""
@@ -165,7 +165,9 @@ ReorganizeByTrigger(text) {
     for line in lines {
         if (RegExMatch(line, "^処方日") || line == "")
             continue
-        if (RegExMatch(line, "\d+\S*[錠pg枚ﾄ]$")) {
+        
+        ; 修正された正規表現を適用
+        if (RegExMatch(line, "(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)")) {
             newOutput .= buffer . line . "`n"
             buffer := ""
         } else {
