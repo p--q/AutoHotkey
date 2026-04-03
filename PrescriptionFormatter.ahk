@@ -1,8 +1,8 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.3.ahk
-; Version: 6.5.3
-; Description: v6.5.2ベース。Sキー・Dキー共に、FinalizeText実行後の最終文字列
-;              に対して外用薬の数量を消去し用法を結合する置換を実行。
+; File: PrescriptionFormatter_v6.5.4.ahk
+; Version: 6.5.4
+; Description: v6.5.2ベース。薬品名や規格内の改行結合を強化。
+;              S/Dキー共にFinalizeText後に外用薬の数量置換を実行。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -28,12 +28,9 @@
             }
         }
         text := RegExReplace(result, "[ \t]+", "")
-        
-        ; --- 仕上げ処理 ---
         text := FinalizeText(text)
         
-        ; 【ご依頼の修正】Sキー時もFinalizeTextの直後に置換を実行
-        ; 数量（枚）と用法（1日X枚）が改行で並んでいる場合に結合
+        ; 最終置換: 数量を除去して用法を結合
         text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\d+枚)$", " $1")
         
         A_Clipboard := text
@@ -61,9 +58,8 @@
     processedLines := []
     
     for line in lines {
-        if (line == "") {
+        if (line == "")
             continue
-        }
 
         if (RegExMatch(line, "^(分\d|1日\d回|1日\d枚)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
@@ -91,10 +87,9 @@
     for line in processedLines
         text .= line "`n"
         
-    ; --- 仕上げ処理 ---
     text := FinalizeText(text)
-
-    ; 【ご依頼の修正】Dキー時もFinalizeTextの直後に置換を実行
+    
+    ; 最終置換: 数量を除去して用法を結合
     text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\d+枚)$", " $1")
     
     A_Clipboard := text
@@ -111,14 +106,12 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
-; --- 共通関数: 外用薬指示や特殊な用法行の結合 ---
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
     for line in lines {
-        if (line == "") {
+        if (line == "")
             continue
-        }
         if (InStr(line, "@@BLOCK@@")) {
             result.Push(line)
             continue
@@ -145,7 +138,6 @@ MergeSpecificPatterns(text) {
     return finalOutput
 }
 
-; --- 共通関数: 最終仕上げ ---
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     text := StrReplace(text, "@@BLOCK@@", "")
@@ -155,7 +147,6 @@ FinalizeText(text) {
     return Trim(text, "`n`r")
 }
 
-; --- 共通関数: 処方日トリガーによるブロック整理 ---
 ReorganizeByTrigger(text) {
     blocks := []
     currentBlock := []
@@ -188,7 +179,9 @@ ReorganizeByTrigger(text) {
                 finalOutput .= outLine "`n"
                 buffer := ""
             } else {
-                if (!InStr(line, " ") || RegExMatch(line, "^[「『(（]")) {
+                ; 改行対策: スペースがない、または特定の記号(「」等)や、
+                ; 規格の数字の続きと思われる行(00mgなど)を強力にバッファへ溜める
+                if (!InStr(line, " ") || RegExMatch(line, "^[「『(（0-9]")) {
                     buffer .= line
                 } else {
                     if (triggerCount > 1)
@@ -203,20 +196,17 @@ ReorganizeByTrigger(text) {
     return finalOutput
 }
 
-; --- 共通関数: 外来オーダ形式の不要行フィルタ ---
 FilterOutpatientOrder(text) {
     lines := StrSplit(text, "`n", "`r")
     result := ""
     for line in lines {
-        if (line == "" || RegExMatch(line, "^(--|<R|処方箋)")) {
+        if (line == "" || RegExMatch(line, "^(--|<R|処方箋)"))
             continue
-        }
         result .= line "`n"
     }
     return result
 }
 
-; --- 共通関数: 入力処理 ---
 ProcessInitialInput() {
     savedClip := A_Clipboard
     A_Clipboard := ""
@@ -226,7 +216,6 @@ ProcessInitialInput() {
     return ConvertToHalfWidth(A_Clipboard)
 }
 
-; --- 共通関数: 全角半角変換 (WinAPI利用) ---
 ConvertToHalfWidth(str) {
     size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
     buf := Buffer(size * 2)
