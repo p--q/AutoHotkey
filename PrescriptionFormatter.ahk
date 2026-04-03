@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.3_Fixed.ahk
-; Version: 6.5.3
-; Description: 処方整形 (AHK v2) - 外用薬結合ロジックをFinalizeText直前に配置
+; File: PrescriptionFormatter_v6.5.4.ahk
+; Version: 6.5.4
+; Description: 処方整形 (AHK v2) - 外用薬の数量除去と用法結合を確実に実行
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -47,7 +47,14 @@
         text := ReorganizeByTrigger(text)
     
     text := MergeSpecificPatterns(text)
+    
+    ; 1. まず余計な空白を詰める (@@SPACE@@は維持される)
     text := RegExReplace(text, "[ \t]+", "")
+    
+    ; 2. 【重要】外用薬の最終行置換ロジック
+    ; 構造: 薬品名 + @@SPACE@@ + 数量(枚) + 改行 + 用法(1日X枚)
+    ; これを「薬品名 + 半角スペース + 用法」に書き換えます
+    text := RegExReplace(text, "s)@@SPACE@@\d+枚\R(1日\d+枚)$", " $1")
     
     lines := StrSplit(text, "`n", "`r")
     processedLines := []
@@ -79,15 +86,9 @@
         }
     }
     
-    ; 全ての行処理が終わった後の文字列
     text := ""
     for line in processedLines
         text .= line "`n"
-    
-    ; --- 外用薬の最終行結合ロジック (FinalizeTextの直前) ---
-    ; ここで @@SPACE@@ を含んだ状態の「 7枚（改行）1日1枚」を「 1日1枚」へ置換します
-    ; @@SPACE@@ は FinalizeText で半角スペースに変わるため、ここではそのままでマッチさせます
-    text := RegExReplace(text, "s)@@SPACE@@\d+枚\r?\n(1日\d+枚)$", " $1")
         
     A_Clipboard := FinalizeText(text)
     ToolTip("整形完了(用法あり)")
@@ -122,6 +123,7 @@ MergeSpecificPatterns(text) {
                 result.Push(line)
         } 
         else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
+            ; ここで「外）」が除去され、用法だけが @@SPACE@@ 付きで前の行と結合される準備ができる
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= "@@SPACE@@" . m[1]
             else
