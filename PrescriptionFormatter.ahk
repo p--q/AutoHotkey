@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.8.7.ahk
-; Version: 6.8.7
-; Description: 処方整形 (AHK v2) - 97行目のRegExReplaceおよび全構文の修復
+; File: PrescriptionFormatter_v6.8.8.ahk
+; Version: 6.8.8
+; Description: 処方整形 (AHK v2) - 出力欠落回避のため分割提示【前半】
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -94,8 +94,127 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "(\d+)m\s*\r?\n\s*g", "$1mg")
     text := RegExReplace(text, "([ァ-ヶ])\s*\r?\n\s*([ァ-ヶ])", "$1$2")
     text := RegExReplace(text, "\(([^)]*)\s*\r?\n\s*([^)]*)\)", "($1$2)")
-    
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
     
-    ; 修正箇所(97-102行目): 引用符を正確に閉じ、変数を完結
-    unitPattern := "(\d+\S*[錠p
+    ; 101行目付近：ここが途切れないよう正確に記述
+    unitPattern := "(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$"
+    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*(?:外\)|日分))(?=.*" . unitPattern . ").*?\K" . unitPattern, "@@SPACE@@$1")
+    
+    text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
+    return text
+}
+MergeSpecificPatterns(text) {
+    lines := StrSplit(text, "`n", "`r")
+    result := []
+    for line in lines {
+        if (line == "")
+            continue
+        if (InStr(line, "@@BLOCK@@")) {
+            result.Push(line)
+            continue
+        }
+        if (RegExMatch(line, "^.+時\s*$")) {
+            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
+                result[result.Length] .= line
+            else
+                result.Push(line)
+        } 
+        else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
+            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
+                result[result.Length] .= "@@SPACE@@" . m[1]
+            else
+                result.Push("@@SPACE@@" . m[1])
+        } 
+        else {
+            result.Push(line)
+        }
+    }
+    finalText := ""
+    for l in result
+        finalText .= l "`n"
+    return finalText
+}
+
+FinalizeText(text) {
+    text := StrReplace(text, "@@SPACE@@", " ")
+    text := RegExReplace(text, "\d+枚\s(1日\d+枚)", "$1")
+    text := RegExReplace(text, "\([^)]+として\)", "")
+    text := RegExReplace(text, "\(\Sとして\)", "")
+    text := StrReplace(text, "(非持参)", "")
+    text := RegExReplace(text, " +", " ")
+    return Trim(text, "`n`r")
+}
+
+ReorganizeByTrigger(text) {
+    blocks := []
+    currentBlock := []
+    lines := StrSplit(text, "`n", "`r")
+    for line in lines {
+        if (RegExMatch(line, "^処方日")) {
+            if (currentBlock.Length > 0)
+                blocks.Push(currentBlock)
+            currentBlock := []
+        } else if (line != "") {
+            currentBlock.Push(line)
+        }
+    }
+    if (currentBlock.Length > 0)
+        blocks.Push(currentBlock)
+
+    finalOutput := ""
+    for blockLines in blocks {
+        triggerCount := 0
+        for l in blockLines {
+            if (InStr(l, "@@SPACE@@"))
+                triggerCount++
+        }
+        buffer := ""
+        for line in blockLines {
+            if (InStr(line, "@@SPACE@@")) {
+                outLine := buffer . line
+                if (triggerCount > 1)
+                    outLine .= "@@BLOCK@@"
+                finalOutput .= outLine "`n"
+                buffer := ""
+            } else {
+                if (!InStr(line, " ")) {
+                    buffer .= line
+                } else {
+                    if (triggerCount > 1)
+                        line .= "@@BLOCK@@"
+                    finalOutput .= line "`n"
+                }
+            }
+        }
+        if (buffer != "")
+            finalOutput .= buffer . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
+    }
+    return finalOutput
+}
+
+FilterOutpatientOrder(text) {
+    lines := StrSplit(text, "`n", "`r")
+    result := ""
+    for line in lines {
+        if (line == "" || RegExMatch(line, "^(--|<R|処方箋)"))
+            continue
+        result .= line "`n"
+    }
+    return result
+}
+
+ProcessInitialInput() {
+    savedClip := A_Clipboard
+    A_Clipboard := ""
+    Send("^c")
+    if !ClipWait(0.5)
+        A_Clipboard := savedClip
+    return ConvertToHalfWidth(A_Clipboard)
+}
+
+ConvertToHalfWidth(str) {
+    size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
+    buf := Buffer(size * 2)
+    DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
+    return StrGet(buf, "UTF-16")
+}
