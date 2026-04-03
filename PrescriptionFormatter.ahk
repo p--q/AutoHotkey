@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.4.ahk
-; Version: 6.4
-; Description: 処方整形 (AHK v2) - 関数定義漏れ修正 + 外)トリガー誤認防止
+; File: PrescriptionFormatter_v6.5.ahk
+; Version: 6.5
+; Description: 処方整形 (AHK v2) - v6.0ベースで「外)」行の除外ロジックを統合
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -90,14 +90,13 @@
 
 ; --- 関数群 ---
 
-; 修正箇所: 関数名を明記
 ApplyBasicFormatting(text) {
     text := StrReplace(text, "吸入用", "")
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
 
-    ; 単位のマーキング (否定先読みで「外)」を含む行を除外)
-    unitPattern := "(\d+\S*[錠p枚ﾄg]|ｷｯﾄ)$"
-    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*外\))(?=.*" . unitPattern . ").*?\K" . unitPattern, "@@SPACE@@$1")
+    ; v6.0のロジックに「外)」除外条件を追加
+    ; 行頭から「外)」を含まない行のみ、末尾の数量に @@SPACE@@ を付与する
+    text := RegExReplace(text, "m)(*ANYCRLF)^(?!.*外\)).*?(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
