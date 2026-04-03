@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.2_Fixed.ahk
-; Version: 6.5.2 (Modified)
-; Description: 処方整形 (AHK v2) - Sキー実行時に@@BLOCK@@が残る問題を修正
+; File: PrescriptionFormatter_v6.5.3.ahk
+; Version: 6.5.3
+; Description: 処方整形 (AHK v2) - 外用薬のメーカー名泣き別れを解消
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -22,9 +22,7 @@
         lines := StrSplit(text, "`n", "`r")
         result := ""
         for line in lines {
-            ; 薬品名と数量の境界マーカー(@@SPACE@@)がある行のみを抽出
             if (InStr(line, "@@SPACE@@")) {
-                ; Sキー時は用法を結合しないため、ここで@@BLOCK@@を事前に除去
                 result .= StrReplace(line, "@@BLOCK@@", "") "`n"
             }
         }
@@ -95,6 +93,7 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
     text := RegExReplace(text, "m)\d+\S+分$", "")
     text := StrReplace(text, "吸入用", "")
+    ; 数量マーカー(@@SPACE@@)の付与
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -136,7 +135,6 @@ MergeSpecificPatterns(text) {
 ; --- 共通関数: 最終仕上げ ---
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
-    ; 万が一残っていた場合の念のための除去を追加
     text := StrReplace(text, "@@BLOCK@@", "")
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
@@ -177,7 +175,8 @@ ReorganizeByTrigger(text) {
                 finalOutput .= outLine "`n"
                 buffer := ""
             } else {
-                if (!InStr(line, " ")) {
+                ; 修正ポイント: スペースを含んでいても、「」や()などのメーカー名表記であればバッファに溜める
+                if (!InStr(line, " ") || RegExMatch(line, "^[「『(（]")) {
                     buffer .= line
                 } else {
                     if (triggerCount > 1)
