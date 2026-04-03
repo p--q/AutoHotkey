@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v5.3.ahk
-; Version: 5.3
-; Description: 処方整形 (AHK v2) - 関数定義漏れ・構文エラー修正完了版
+; File: PrescriptionFormatter_v5.4.ahk
+; Version: 5.4
+; Description: 処方整形 (AHK v2) - 分1削除タイミング変更・BLOCK時整形維持版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -56,25 +56,31 @@
         if (line == "")
             continue
 
-        if (InStr(line, "@@BLOCK@@")) {
-            processedLines.Push(StrReplace(line, "@@BLOCK@@", ""))
-            continue
-        }
-
+        ; 用法判定
         if (RegExMatch(line, "^(分\d|1日\d回|\d回分)")) {
+            ; 1. 表記の簡略化処理（@@BLOCK@@ 有無に関わらず実行）
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
             line := RegExReplace(line, "\[食間\]", "")
+            ; ここで「分1」を削除
+            line := StrReplace(line, "分1", "")
+            
+            ; 2. 結合処理の判定
+            isBlock := InStr(line, "@@BLOCK@@")
+            line := StrReplace(line, "@@BLOCK@@", "")
             
             prevLine := (processedLines.Length > 0) ? processedLines[processedLines.Length] : ""
-            if (processedLines.Length > 0 && !RegExMatch(prevLine, "時$")) {
+            
+            ; BLOCKマーカーがなく、かつ直前が「時」で終わらない場合のみ結合
+            if (!isBlock && processedLines.Length > 0 && !RegExMatch(prevLine, "時$")) {
                 processedLines[processedLines.Length] .= line
             } else {
                 processedLines.Push(line)
             }
         } else {
-            processedLines.Push(line)
+            ; 薬品行など
+            processedLines.Push(StrReplace(line, "@@BLOCK@@", ""))
         }
     }
     
@@ -90,14 +96,13 @@
 ; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
-    text := RegExReplace(text, "m)(*ANYCRLF)^分1$", "")
+    ; 分1削除はメインループへ移動したためここでは行わない
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
 }
 
-; 修正箇所: 関数名 MergeSpecificPatterns(text) を復旧
 MergeSpecificPatterns(text) {
     lines := StrSplit(text, "`n", "`r")
     result := []
