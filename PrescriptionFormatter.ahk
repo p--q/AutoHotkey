@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.5.4.ahk
-; Version: 6.5.4
-; Description: 処方整形 (AHK v2) - 外用薬の数量除去と用法結合を確実に実行
+; File: PrescriptionFormatter_v6.5.3.ahk
+; Version: 6.5.3
+; Description: v6.5.2ベース。FinalizeText後の最終置換ロジックを追加。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -23,7 +23,7 @@
         result := ""
         for line in lines {
             if (InStr(line, "@@SPACE@@")) {
-                result .= StrReplace(line, "@@BLOCK@@", "") "`n"
+                result .= line "`n"
             }
         }
         text := RegExReplace(result, "[ \t]+", "")
@@ -47,14 +47,7 @@
         text := ReorganizeByTrigger(text)
     
     text := MergeSpecificPatterns(text)
-    
-    ; 1. まず余計な空白を詰める (@@SPACE@@は維持される)
     text := RegExReplace(text, "[ \t]+", "")
-    
-    ; 2. 【重要】外用薬の最終行置換ロジック
-    ; 構造: 薬品名 + @@SPACE@@ + 数量(枚) + 改行 + 用法(1日X枚)
-    ; これを「薬品名 + 半角スペース + 用法」に書き換えます
-    text := RegExReplace(text, "s)@@SPACE@@\d+枚\R(1日\d+枚)$", " $1")
     
     lines := StrSplit(text, "`n", "`r")
     processedLines := []
@@ -90,7 +83,14 @@
     for line in processedLines
         text .= line "`n"
         
-    A_Clipboard := FinalizeText(text)
+    ; 1. まず通常の整形を完了させる
+    text := FinalizeText(text)
+
+    ; 2. 【ご指定の修正】FinalizeTextの「後」に置換を実行
+    ; 改行コードは \R (または \r?\n) を使用し、外) も含めて置換します
+    text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\d+枚)$", " $1")
+    
+    A_Clipboard := text
     ToolTip("整形完了(用法あり)")
     SetTimer(() => ToolTip(), -2000)
 }
@@ -123,7 +123,6 @@ MergeSpecificPatterns(text) {
                 result.Push(line)
         } 
         else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
-            ; ここで「外）」が除去され、用法だけが @@SPACE@@ 付きで前の行と結合される準備ができる
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= "@@SPACE@@" . m[1]
             else
@@ -182,6 +181,7 @@ ReorganizeByTrigger(text) {
                 finalOutput .= outLine "`n"
                 buffer := ""
             } else {
+                ; スペースが含まれていても、特定の記号で始まる行（メーカー名など）はバッファに貯める
                 if (!InStr(line, " ") || RegExMatch(line, "^[「『(（]")) {
                     buffer .= line
                 } else {
