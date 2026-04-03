@@ -1,14 +1,11 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v4.8.ahk
-; Version: 4.8
-; Description: 処方整形スクリプト (AHK v2) - 関数D境界制限・(非持参)削除修正版
+; File: PrescriptionFormatter_v4.9.ahk
+; Version: 4.9
+; Description: 処方整形 (AHK v2) - 分1削除・複数薬品ブロック保護版
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
 
-; ------------------------------------------------------------------------------
-; Win + Alt + S : 用法なし出力
-; ------------------------------------------------------------------------------
 #!s:: {
     text := ProcessInitialInput()
     if (RegExMatch(text, "^商品名")) {
@@ -37,9 +34,6 @@
     SetTimer(() => ToolTip(), -2000)
 }
 
-; ------------------------------------------------------------------------------
-; Win + Alt + D : 用法あり出力
-; ------------------------------------------------------------------------------
 #!d:: {
     text := ProcessInitialInput()
     if (SubStr(text, 1, 2) == "--") {
@@ -58,6 +52,12 @@
     for line in lines {
         if (line == "")
             continue
+
+        ; 保護マーカーがある場合は結合せずにそのままPush
+        if (InStr(line, "@@BLOCK@@")) {
+            processedLines.Push(StrReplace(line, "@@BLOCK@@", ""))
+            continue
+        }
 
         if (RegExMatch(line, "^(分\d|1日\d回|\d回分)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
@@ -85,12 +85,12 @@
     SetTimer(() => ToolTip(), -2000)
 }
 
-; ------------------------------------------------------------------------------
-; 関数群
-; ------------------------------------------------------------------------------
+; --- 関数群 ---
 
 ApplyBasicFormatting(text) {
     text := RegExReplace(text, "m)(*ANYCRLF)\d+\S*分$", "")
+    ; 追加：独立した「分1」を削除
+    text := RegExReplace(text, "m)(*ANYCRLF)^分1$", "")
     text := RegExReplace(text, "m)(*ANYCRLF)(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)", "@@SPACE@@$1")
     text := RegExReplace(text, "m)(*ANYCRLF)cap$", "c")
     return text
@@ -103,9 +103,14 @@ MergeSpecificPatterns(text) {
         if (line == "")
             continue
 
-        ; 修正：\S（空白以外）から .+（空白含む）へ変更し、行末が「時」なら結合
+        ; 保護マーカーがある場合は結合をスキップ
+        if (InStr(line, "@@BLOCK@@")) {
+            result.Push(line)
+            continue
+        }
+
         if (RegExMatch(line, "^.+時$")) {
-            if (result.Length > 0)
+            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= line
             else
                 result.Push(line)
@@ -113,7 +118,7 @@ MergeSpecificPatterns(text) {
             line := RegExReplace(line, "^(分\d+)\s(\d)", "$1@@SPACE@@$2")
             result.Push(line)
         } else if (RegExMatch(line, "^外\)\s(.*)$", &m)) {
-            if (result.Length > 0)
+            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@"))
                 result[result.Length] .= "@@SPACE@@" . m[1]
             else
                 result.Push("@@SPACE@@" . m[1])
@@ -132,7 +137,6 @@ MergeSpecificPatterns(text) {
 FinalizeText(text) {
     text := StrReplace(text, "@@SPACE@@", " ")
     text := RegExReplace(text, "\(\Sとして\)", "")
-    ; 修正：(非持参) を正確に削除
     text := StrReplace(text, "(非持参)", "")
     return Trim(text, "`n`r")
 }
@@ -157,36 +161,58 @@ ProcessInitialInput() {
     return ConvertToHalfWidth(A_Clipboard)
 }
 
-; 【関数D】処方日をまたがないように修正
 ReorganizeByTrigger(text) {
+    blocks := []
+    currentBlock := []
+    
+    ; 1. 処方日ごとにテキストを分割
     lines := StrSplit(text, "`n", "`r")
-    newOutput := ""
-    buffer := ""
     for line in lines {
-        ; 修正：処方日から始まる行に遭遇したら、そこまでのバッファを放出してリセット
         if (RegExMatch(line, "^処方日")) {
-            if (buffer != "") {
-                newOutput .= buffer "`n"
-                buffer := ""
-            }
+            if (currentBlock.Length > 0)
+                blocks.Push(currentBlock)
+            currentBlock := []
             continue
         }
-        
-        if (line == "")
-            continue
-        
-        if (RegExMatch(line, "(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)")) {
-            newOutput .= buffer . line . "`n"
-            buffer := ""
-        } else {
-            if (!InStr(line, " "))
-                buffer .= line
-            else
-                newOutput .= line . "`n"
-        }
+        if (line != "")
+            currentBlock.Push(line)
     }
-    ; 最後に残ったバッファがあれば出力
-    return newOutput . (buffer != "" ? buffer "`n" : "")
+    if (currentBlock.Length > 0)
+        blocks.Push(currentBlock)
+
+    finalOutput := ""
+    for blockLines in blocks {
+        ; このブロック内にトリガー行（薬品終端）がいくつあるか数える
+        triggerCount := 0
+        for l in blockLines {
+            if (RegExMatch(l, "(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)"))
+                triggerCount++
+        }
+
+        buffer := ""
+        for line in blockLines {
+            if (RegExMatch(line, "(\d+\S*[錠p枚ﾄ]$|\s\d+\S*g$)")) {
+                outLine := buffer . line
+                ; トリガーが複数ある場合は保護マーカーを付与
+                if (triggerCount > 1)
+                    outLine .= "@@BLOCK@@"
+                finalOutput .= outLine "`n"
+                buffer := ""
+            } else {
+                if (!InStr(line, " "))
+                    buffer .= line
+                else {
+                    ; 用法行にもマーカー付与
+                    if (triggerCount > 1)
+                        line .= "@@BLOCK@@"
+                    finalOutput .= line "`n"
+                }
+            }
+        }
+        if (buffer != "")
+            finalOutput .= buffer . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
+    }
+    return finalOutput
 }
 
 ConvertToHalfWidth(str) {
