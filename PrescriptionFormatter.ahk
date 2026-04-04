@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.6.5.ahk
-; Version: 6.6.5
-; Description: ProcessInitialInput 内の return 文の閉じ括弧不足を修正。
+; File: PrescriptionFormatter_v6.6.6.ahk
+; Version: 6.6.6
+; Description: 構文エラー(Missing "}")を修正。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -93,9 +93,8 @@ PrepareFormatting(suffix) {
         return false 
     }
     sourceLabel := (resultObj.Source == "Selected") ? "選択を整形" : "クリップボードを整形"
+    ; オブジェクトを返却
     return {Text: resultObj.Text, Msg: sourceLabel "(" suffix ")"}
 }
 
-; --- 共通関数: 入力処理 ---
-ProcessInitialInput() {
-    savedClip := A
+; --- 共通関数:
