@@ -1,15 +1,13 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.6.3.ahk
-; Version: 6.6.3
-; Description: 重複ロジックを PrepareFormatting に集約。
-;              取得元メッセージの動的生成とエラーハンドリングを一括管理。
+; File: PrescriptionFormatter_v6.6.4.ahk
+; Version: 6.6.4
+; Description: ReorganizeByTrigger 内の不要な閉じ括弧を削除。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
 
 ; --- Win + Alt + S: 用法なし整形 ---
 #!s:: {
-    ; 引数に表示用メッセージ(用法錠数なし / 用法なし)を指定
     if !(info := PrepareFormatting("用法なし"))
         return
     
@@ -92,9 +90,8 @@ PrepareFormatting(suffix) {
     resultObj := ProcessInitialInput()
     if (resultObj.Text == "") {
         NotifyError()
-        return false ; 呼び出し元で if !(...) を使って中断させる
+        return false 
     }
-    
     sourceLabel := (resultObj.Source == "Selected") ? "選択を整形" : "クリップボードを整形"
     return {Text: resultObj.Text, Msg: sourceLabel "(" suffix ")"}
 }
@@ -111,101 +108,4 @@ ProcessInitialInput() {
         rawText := savedClip
         source := "Clipboard"
     }
-    return {Text: ConvertToHalfWidth(rawText), Source: source}
-}
-
-NotifyError() {
-    ToolTip("整形する文字列を取得できませんでした")
-    SetTimer(() => ToolTip(), -2000)
-}
-
-; --- 共通関数: 各種整形ロジック (v6.6.1継承) ---
-ApplyBasicFormatting(text) {
-    text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
-    text := RegExReplace(text, "m)\d+\S+分$", "")
-    text := StrReplace(text, "吸入用", "")
-    text := RegExReplace(text, "i)(\d+)\s*([錠p枚ﾄ]|cap|g)", "@@SPACE@@$1$2")
-    text := RegExReplace(text, "i)cap", "c")
-    return text
-}
-
-ReorganizeByTrigger(text) {
-    blocks := [], currentBlock := []
-    lines := StrSplit(text, "`n", "`r")
-    for line in lines {
-        if (RegExMatch(line, "^処方日")) {
-            if (currentBlock.Length > 0) blocks.Push(currentBlock)
-            currentBlock := []
-        } else if (line != "") {
-            currentBlock.Push(line)
-        }
-    }
-    if (currentBlock.Length > 0) blocks.Push(currentBlock)
-    finalOutput := ""
-    for blockLines in blocks {
-        triggerCount := 0
-        for l in blockLines {
-            if (InStr(l, "@@SPACE@@")) triggerCount++
-        }
-        buffer := ""
-        for line in blockLines {
-            if (InStr(line, "@@SPACE@@")) {
-                finalOutput .= buffer . line . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
-                buffer := ""
-            } else {
-                if (!InStr(line, " ") && !InStr(line, "　")) buffer .= line
-                else finalOutput .= line . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
-            }
-        }
-        if (buffer != "") finalOutput .= buffer . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
-    }
-    return finalOutput
-}
-
-MergeSpecificPatterns(text) {
-    lines := StrSplit(text, "`n", "`r"), result := []
-    for line in lines {
-        if (line == "") continue
-        if (InStr(line, "@@BLOCK@@")) {
-            result.Push(line)
-            continue
-        }
-        if (RegExMatch(line, "^.+時\s*$")) {
-            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@")) result[result.Length] .= line
-            else result.Push(line)
-        } else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
-            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@")) result[result.Length] .= "@@SPACE@@" . m[1]
-            else result.Push("@@SPACE@@" . m[1])
-        } else result.Push(line)
-    }
-    finalOutput := ""
-    for l in result
-        finalOutput .= l "`n"
-    return finalOutput
-}
-
-FinalizeText(text) {
-    text := StrReplace(text, "@@SPACE@@", " ")
-    text := StrReplace(text, "@@BLOCK@@", "")
-    text := RegExReplace(text, "\(\Sとして\)", "")
-    text := StrReplace(text, "(非持参)", "")
-    text := RegExReplace(text, " +", " ")
-    return Trim(text, "`n`r")
-}
-
-FilterOutpatientOrder(text) {
-    lines := StrSplit(text, "`n", "`r"), result := ""
-    for line in lines {
-        if (line == "" || RegExMatch(line, "^(--|<R|処方箋)")) continue
-        result .= line "`n"
-    }
-    return result
-}
-
-ConvertToHalfWidth(str) {
-    if (str == "") return ""
-    size := DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", 0, "Int", 0)
-    buf := Buffer(size * 2)
-    DllCall("LCMapStringW", "UInt", 0x400, "UInt", 0x00400000, "Str", str, "Int", -1, "Ptr", buf, "Int", size)
-    return StrGet(buf, "UTF-16")
-}
+    return {Text:
