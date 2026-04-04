@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.6.4.ahk
-; Version: 6.6.4
-; Description: ReorganizeByTrigger 内の不要な閉じ括弧を削除。
+; File: PrescriptionFormatter_v6.6.5.ahk
+; Version: 6.6.5
+; Description: ProcessInitialInput 内の return 文の閉じ括弧不足を修正。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -98,14 +98,4 @@ PrepareFormatting(suffix) {
 
 ; --- 共通関数: 入力処理 ---
 ProcessInitialInput() {
-    savedClip := A_Clipboard
-    A_Clipboard := "" 
-    Send("^c")
-    if ClipWait(0.5) {
-        rawText := A_Clipboard
-        source := "Selected"
-    } else {
-        rawText := savedClip
-        source := "Clipboard"
-    }
-    return {Text:
+    savedClip := A
