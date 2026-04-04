@@ -1,7 +1,7 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.6.6.ahk
-; Version: 6.6.6
-; Description: 構文エラー(Missing "}")を修正。
+; File: PrescriptionFormatter_v6.6.7.ahk
+; Version: 6.6.7
+; Description: 戻り値のオブジェクト構文を確実な記法に変更し、構文エラーを解消。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -93,8 +93,42 @@ PrepareFormatting(suffix) {
         return false 
     }
     sourceLabel := (resultObj.Source == "Selected") ? "選択を整形" : "クリップボードを整形"
-    ; オブジェクトを返却
-    return {Text: resultObj.Text, Msg: sourceLabel "(" suffix ")"}
+    ; 変数に格納してから返すことで、 return 後の構文エラーを回避
+    outInfo := {Text: resultObj.Text, Msg: sourceLabel "(" suffix ")"}
+    return outInfo
 }
 
-; --- 共通関数:
+; --- 共通関数: 入力処理 ---
+ProcessInitialInput() {
+    savedClip := A_Clipboard
+    A_Clipboard := "" 
+    Send("^c")
+    if ClipWait(0.5) {
+        rawText := A_Clipboard
+        source := "Selected"
+    } else {
+        rawText := savedClip
+        source := "Clipboard"
+    }
+    ; オブジェクト生成を明示的に記述
+    res := {Text: ConvertToHalfWidth(rawText), Source: source}
+    return res
+}
+
+NotifyError() {
+    ToolTip("整形する文字列を取得できませんでした")
+    SetTimer(() => ToolTip(), -2000)
+}
+
+; --- 共通関数: 各種整形ロジック ---
+ApplyBasicFormatting(text) {
+    text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
+    text := RegExReplace(text, "m)\d+\S+分$", "")
+    text := StrReplace(text, "吸入用", "")
+    text := RegExReplace(text, "i)(\d+)\s*([錠p枚ﾄ]|cap|g)", "@@SPACE@@$1$2")
+    text := RegExReplace(text, "i)cap", "c")
+    return text
+}
+
+ReorganizeByTrigger(text) {
+    blocks := [],
