@@ -1,7 +1,8 @@
 ; ==============================================================================
-; File: PrescriptionFormatter_v6.6.9.ahk
-; Version: 6.6.9
-; Description: 構文エラーを完全に排除。関数構造を再定義。
+; File: PrescriptionFormatter_v6.7.0.ahk
+; Version: 6.7.0
+; Description: return文におけるオブジェクトリテラルの解釈エラーを回避するため
+;              一旦変数に代入してから返す記法へ全面的に修正。
 ; ==============================================================================
 
 #Requires AutoHotkey v2.0
@@ -26,13 +27,13 @@
         }
         
         lines := StrSplit(text, "`n", "`r")
-        res := ""
+        resText := ""
         for line in lines {
             if (InStr(line, "@@SPACE@@")) {
-                res .= line "`n"
+                resText .= line "`n"
             }
         }
-        text := RegExReplace(res, "[ \t]+", "")
+        text := RegExReplace(resText, "[ \t]+", "")
         text := FinalizeText(text)
         text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\s*\d+枚)$", " $1")
         
@@ -109,7 +110,9 @@ PrepareFormatting(suffix) {
         return false 
     }
     sourceLabel := (resultObj.Source == "Selected") ? "選択を整形" : "クリップボードを整形"
-    return {Text: resultObj.Text, Msg: sourceLabel "(" suffix ")"}
+    ; 変数に代入してから返すことで構文エラーを回避
+    infoObj := {Text: resultObj.Text, Msg: sourceLabel "(" suffix ")"}
+    return infoObj
 }
 
 ProcessInitialInput() {
@@ -118,9 +121,42 @@ ProcessInitialInput() {
     Send("^c")
     if ClipWait(0.5) {
         rawText := A_Clipboard
-        source := "Selected"
+        src := "Selected"
     } else {
         rawText := savedClip
-        source := "Clipboard"
+        src := "Clipboard"
     }
-    return {Text: ConvertToHalfWidth
+    ; 変数に代入してから返すことで構文エラーを回避
+    resObj := {Text: ConvertToHalfWidth(rawText), Source: src}
+    return resObj
+}
+
+NotifyError() {
+    ToolTip("整形する文字列を取得できませんでした")
+    SetTimer(() => ToolTip(), -2000)
+}
+
+ApplyBasicFormatting(text) {
+    text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
+    text := RegExReplace(text, "m)\d+\S+分$", "")
+    text := StrReplace(text, "吸入用", "")
+    text := RegExReplace(text, "i)(\d+)\s*([錠p枚ﾄ]|cap|g)", "@@SPACE@@$1$2")
+    text := RegExReplace(text, "i)cap", "c")
+    return text
+}
+
+ReorganizeByTrigger(text) {
+    blocks := [], currentBlock := []
+    lines := StrSplit(text, "`n", "`r")
+    for line in lines {
+        if (RegExMatch(line, "^処方日")) {
+            if (currentBlock.Length > 0) {
+                blocks.Push(currentBlock)
+            }
+            currentBlock := []
+        } else if (line != "") {
+            currentBlock.Push(line)
+        }
+    }
+    if (currentBlock.Length > 0) {
+        blocks.
