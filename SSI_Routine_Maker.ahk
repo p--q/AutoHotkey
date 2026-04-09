@@ -1,83 +1,102 @@
 /*
-【SSIルーチン作成補助スクリプト（ダイアログ対応版）】
+【SSIルーチン作成補助スクリプト】
 ファイル名：SSI_Routine_Maker.ahk
-*/
-TotalDays := 6  ; 繰り返す日数
-; 確認ダイアログのタイトル（Window Spyで確認して正確に記入してください）
-DialogTitle := "確認" 
-/*
-■追加機能：
-Alt+S のあとに「保存しますか？」などのダイアログが出た場合、
-自動的に「y」キーを押して続行します。
+バージョン：1.9.0
+
+■変数の解説：
+- SleepAfterC  : 最優先。cキー（レコード作成）後のシステム処理待ち。
+- SleepMenu    : 右クリック後、メニューが描画されるまでの待ち。
+- SleepAction  : 保存(Alt+S)後や確定(Enter)後、画面が静止するまでの待ち。
+- SleepMove    : 矢印キー移動など、画面変化が少ない操作の待ち。
 */
 
+; --- 詳細チューニング変数（ここを調整してください） ---
+TotalDays    := 6
+DelayKey     := 50     ; キーの押し下げ・間隔 (ms)
+
+SleepAfterC  := 500    ; 「c」キー入力後の待機 (クリティカル)
+SleepMenu    := 300    ; 右クリックメニューの描画待ち (やや重い)
+SleepAction  := 300    ; 保存(!s)や確定(Enter)後の反映待ち (重い)
+SleepMove    := 150    ; 矢印キー(Down)などの移動待ち (軽い)
+
+DialogTitle  := "確認" 
+; --------------------------------------------------
+
 #Requires AutoHotkey v2.0
+
+SendMode("Event")
+SetKeyDelay(DelayKey, DelayKey)
 
 +RButton:: {
     CoordMode("Mouse", "Client")
 
-    ; 1. コントロール取得
+    ; 1. コントロール情報取得
     MouseGetPos(,, &targetWin, &targetClassNN, 2)
     if (targetClassNN = "") {
-        MsgBox("コントロールが見つかりません。", "エラー", "Icon!")
+        MsgBox("コントロール未検出", "SSI V1.9.0", "Icon!")
         return
     }
 
-    ; 2. 座標取得と計算
     try {
         ControlGetPos(&cX, &cY, &cW, &cH, targetClassNN, targetWin)
     } catch {
-        MsgBox("座標取得に失敗しました。", "エラー", "Icon!")
+        MsgBox("座標取得失敗", "SSI V1.9.0", "Icon!")
         return
     }
 
     targetX := Integer(cX + (cW / 3))
     targetY := Integer(cY + cH + (cH / 3))
 
-    ; 3. 開始
-    Click("Right")
-    Sleep(400)
+    ; 2. 初期動作
+    Click(cX, cY, "Right")
+    Sleep(SleepMenu)
+    
+    Send("c")
+    Sleep(SleepAfterC)
 
-    ; 4. ループ処理
+    ; 3. メインループ
     Loop TotalDays {
         a := A_Index 
 
-        Send("c")
-        Sleep(200)
-
-        ; --- Alt+S と ダイアログ処理 ---
+        ; --- 現在の行を保存 ---
         Send("!s")
+        Sleep(SleepAction)
         
-        ; ダイアログが出るのを最大1.0秒待つ
-        if WinWait(DialogTitle,, 1.0) {
-            Send("y")    ; ダイアログが出たら y を押す
-            Sleep(300)   ; 閉じるのを待つ
-        }
-        Sleep(400)       ; 次の動作への待機
-
-        ; 計算済みの座標で右クリック
-        Click(targetX, targetY, "Right")
-        Sleep(400)
-
-        Send("{Down 3}{Enter}")
-        Sleep(400)
-
-        Send("{Down " . a . "}")
-        Sleep(200)
-        Send("!s")
-        
-        ; ここでもダイアログが出る可能性がある場合は、同様に追記可能です
-        if WinWait(DialogTitle,, 1.0) {
+        if WinWait(DialogTitle,, 0.5) {
             Send("y")
-            Sleep(300)
+            Sleep(SleepAction)
         }
-        Sleep(600)
 
+        ; --- 次の行（target）を右クリック ---
+        Click(targetX, targetY, "Right")
+        Sleep(SleepMenu)
+
+        ; --- メニュー選択（下3回 ＞ Enter） ---
+        Send("{Down 3}{Enter}")
+        Sleep(SleepAction) ; Enter後は画面が変わるためAction
+
+        ; --- 日付選択（下a回） ---
+        Send("{Down " . a . "}")
+        Sleep(SleepMove)   ; 単なる選択移動なのでMove（短めでOK）
+        
+        ; --- 保存 ---
+        Send("!s")
+        if WinWait(DialogTitle,, 0.5) {
+            Send("y")
+            Sleep(SleepAction)
+        }
+        
+        Sleep(SleepMove)
+
+        ; --- 元の場所（PosA）へ戻る ---
         Click(cX, cY, "Right")
-        Sleep(400)
+        Sleep(SleepMenu)
+        
+        Send("c")
+        Sleep(SleepAfterC)
     }
 
-    MsgBox(TotalDays "回分の処理が完了しました。", "完了", "Iconi")
+    MsgBox(TotalDays "回分の処理が完了しました。", "SSI V1.9.0", "Iconi")
 }
 
 Esc::ExitApp
