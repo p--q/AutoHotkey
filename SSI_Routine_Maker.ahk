@@ -1,7 +1,7 @@
 /*
 【SSIルーチン作成補助スクリプト】
 ファイル名：SSI_Routine_Maker.ahk
-バージョン：1.9.0
+バージョン：1.9.1
 
 1920x1080の画面で最大化したときにセットメニューの点滴を6日分コピーする。
 コピーしたい点滴のチェックボックスのある枠でShift+右クリックで開始。
@@ -51,16 +51,14 @@ SetKeyDelay(DelayKey, DelayKey)
     targetX := Integer(cX + (cW / 3))
     targetY := Integer(cY + cH + (cH / 3))
 
-    ; 2. 初期動作
-    Click(cX, cY, "Right")
-    Sleep(SleepMenu)
-    
-    Send("c")
-    Sleep(SleepAfterC)
-
-    ; 3. メインループ
     Loop TotalDays {
         a := A_Index 
+
+        Click(cX, cY, "Right")
+        Sleep(SleepMenu)
+        
+        Send("c")
+        Sleep(SleepAfterC)
 
         ; --- 現在の行を保存 ---
         Send("!s")
@@ -92,12 +90,6 @@ SetKeyDelay(DelayKey, DelayKey)
         
         Sleep(SleepMove)
 
-        ; --- 元の場所（PosA）へ戻る ---
-        Click(cX, cY, "Right")
-        Sleep(SleepMenu)
-        
-        Send("c")
-        Sleep(SleepAfterC)
     }
 
     MsgBox(TotalDays "回分の処理が完了しました。", "SSI V1.9.0", "Iconi")
