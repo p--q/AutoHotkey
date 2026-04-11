@@ -54,15 +54,18 @@ Esc::Exit
 ; --- 右クリック後の出現監視関数 ---
 WaitContextMenu() {
     Loop 20 { ; 最大2秒程度待機
-        ; 1. Window Spyと同じく「アクティブなクラス」を取得
-        try {
-            activeClass := WinGetClass("A")
-            activeCtrl  := ControlGetFocus("A")
-            
-            ; 2. 普段（メイン画面）とは違うクラス、または特定のコントロールが出現したか判定
-            ; ※ここでWindow Spyに表示された「メニュー出現時のクラス名」を指定
-            if InStr(activeClass, "WindowsForms10.Window.20808.app.") { 
-                return 
+        ; 1. マウスの現在座標にあるウィンドウとコントロールを取得
+        ; OutputVarWin: ウィンドウハンドル(HWND)
+        ; OutputVarControl: コントロールのClassNN
+        MouseGetPos(,, &mHwnd, &mCtrl)
+        if (mHwnd) {
+            ; 2. そのウィンドウハンドルからクラス名を取得
+            try {
+                mClass := WinGetClass("ahk_id " mHwnd)
+                ; 4. Window Spyで特定した「固定部分」が含まれているか判定
+                if InStr(mClass, "WindowsForms10.Window.20808.app.") {
+                    return
+                }
             }
         }
         Sleep(100)
