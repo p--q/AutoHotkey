@@ -1,35 +1,25 @@
 /*
 【SSIルーチン作成補助スクリプト】
 ファイル名：SSI_Routine_Maker.ahk
-バージョン：1.9.1
-
-1920x1080の画面で最大化したときにセットメニューの点滴を6日分コピーする。
-コピーしたい点滴のチェックボックスのある枠でShift+右クリックで開始。
-中止はESC
-
-■変数の解説：
-- SleepAfterC  : 最優先。cキー（レコード作成）後のシステム処理待ち。
-- SleepMenu    : 右クリック後、メニューが描画されるまでの待ち。
-- SleepAction  : 保存(Alt+S)後や確定(Enter)後、画面が静止するまでの待ち。
-- SleepMove    : 矢印キー移動など、画面変化が少ない操作の待ち。
+バージョン：2.1 (前方一致・安定化版)
 */
-
-; --- 詳細チューニング変数（ここを調整してください） ---
-TotalDays    := 6
-DelayKey     := 50     ; キーの押し下げ・間隔 (ms)
-
-SleepAfterC  := 500    ; 「c」キー入力後の待機 (クリティカル)
-SleepMenu    := 300    ; 右クリックメニューの描画待ち (やや重い)
-SleepAction  := 300    ; 保存(!s)や確定(Enter)後の反映待ち (重い)
-SleepMove    := 150    ; 矢印キー(Down)などの移動待ち (軽い)
-
-DialogTitle  := "確認" 
-; --------------------------------------------------
 
 #Requires AutoHotkey v2.0
 
-SendMode("Event")
-SetKeyDelay(DelayKey, DelayKey)
+; --- 設定セクション ---
+TotalDays   := 6
+DialogTitle := "確認"  ; 先頭が「確認」で始まるウィンドウを待機
+; コンテキストメニューのクラス名
+MenuClass   := "ahk_class Windows.Forms10.Window.20808.app."
+; 確定ボタンのテキスト（先頭が「確定(&S)」で始まるボタン）
+BtnConfirm  := "確定(&S)"
+; 日付選択ウィンドウのタイトル
+DateWinTitle := "基準日から何日前後に登録するか選択"
+
+; タイトル・コントロールの一致モードを「1：前方一致」に設定
+SetTitleMatchMode(1)
+
+; --------------------------------------------------
 
 +RButton:: {
     CoordMode("Mouse", "Client")
@@ -37,62 +27,83 @@ SetKeyDelay(DelayKey, DelayKey)
     ; 1. コントロール情報取得
     MouseGetPos(,, &targetWin, &targetClassNN, 2)
     if (targetClassNN = "") {
-        MsgBox("コントロール未検出", "SSI V1.9.0", "Icon!")
+        MsgBox("コントロール未検出", "SSI_Routine_Maker", "Icon!")
         return
     }
 
     try {
         ControlGetPos(&cX, &cY, &cW, &cH, targetClassNN, targetWin)
     } catch {
-        MsgBox("座標取得失敗", "SSI V1.9.0", "Icon!")
+        MsgBox("座標取得失敗", "SSI_Routine_Maker", "Icon!")
         return
     }
 
+    ; 複製先の相対座標計算（1つ下の項目を想定）
     targetX := Integer(cX + (cW / 3))
     targetY := Integer(cY + cH + (cH / 3))
 
     Loop TotalDays {
         a := A_Index 
 
-        Click(cX, cY, "Right")
-        Sleep(SleepMenu)
+        ; --- 1. 元の薬剤を右クリック（メニューが出るまで） ---
+        Loop 10 {
+            Click(cX, cY, "Right")
+            ; 前方一致でクラス名を確認
+            if WinWait(MenuClass, , 0.5)
+                break
+            if (A_Index = 10) {
+                MsgBox("メニューが出現しませんでした。", "エラー", "Icon!")
+                return
+            }
+        }
         
-        Send("c")
-        Sleep(SleepAfterC)
+        Send("c") ; 複製ショートカット
 
-        ; --- 現在の行を保存 ---
-        Send("!s")
-        Sleep(SleepAction)
-        
-        if WinWait(DialogTitle,, 0.5) {
-            Send("y")
-            Sleep(SleepAction)
+        ; --- 2. 確定(&S)ボタンが出現するまで待機して送信 ---
+        ; 前方一致設定により、「確定(&S)」で始まるコントロールを捕捉
+        Loop 20 {
+            try {
+                if ControlGetVisible(BtnConfirm, "ahk_id " . targetWin) {
+                    Send("!s")
+                    break
+                }
+            }
+            Sleep(100)
         }
 
-        ; --- 次の行（target）を右クリック ---
-        Click(targetX, targetY, "Right")
-        Sleep(SleepMenu)
+        ; --- 3. 確認ダイアログ（前方一致）が出た場合は 'y' を送る ---
+        if WinWait(DialogTitle, , 0.8) {
+            Send("y")
+            WinWaitClose(DialogTitle, , 1.0)
+        }
 
-        ; --- メニュー選択（下3回 ＞ Enter） ---
+        ; --- 4. 複製された薬剤を右クリック（メニューが出るまで） ---
+        Loop 10 {
+            Click(targetX, targetY, "Right")
+            if WinWait(MenuClass, , 0.5)
+                break
+            if (A_Index = 10) {
+                MsgBox("複製先のメニューが出現しませんでした。", "エラー", "Icon!")
+                return
+            }
+        }
+
+        ; --- 5. メニュー選択（下3回 ＞ Enter） ---
         Send("{Down 3}{Enter}")
-        Sleep(SleepAction) ; Enter後は画面が変わるためAction
 
-        ; --- 日付選択（下a回） ---
-        Send("{Down " . a . "}")
-        Sleep(SleepMove)   ; 単なる選択移動なのでMove（短めでOK）
-        
-        ; --- 保存 ---
-        Send("!s")
-        if WinWait(DialogTitle,, 0.5) {
-            Send("y")
-            Sleep(SleepAction)
+        ; --- 6. 日付選択ウィンドウ（前方一致）が出現するまで待機 ---
+        if WinWait(DateWinTitle, , 2.0) {
+            WinActivate(DateWinTitle)
+            Sleep(100)
+            Send("{Down " . a . "}")
+            Send("!s")
+            WinWaitClose(DateWinTitle, , 2.0)
         }
         
-        Sleep(SleepMove)
-
+        Sleep(200) ; ループ間の安定化ウェイト
     }
 
-    MsgBox(TotalDays "回分の処理が完了しました。", "SSI V1.9.0", "Iconi")
+    MsgBox(TotalDays "日分の複製が完了しました。", "完了", "Iconi")
 }
 
 Esc::ExitApp
