@@ -38,7 +38,7 @@ SetTitleMatchMode(1) ; 前方一致
     ; 複製先の座標を計算（今マウスがある位置から、枠の高さ分だけ下へ）
     ; ※少し余裕を持たせるために (cH / 3) を足していますが、不要なら + cH だけでOKです。
     targetX := mX
-    targetY := Integer(mY + cH + (cH / 3))
+    targetY := mY + cH 
 
     Loop TotalDays {
         a := A_Index 
