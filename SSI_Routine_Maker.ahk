@@ -34,13 +34,13 @@ SleepMove    := 150    ; 矢印キー(Down)などの移動待ち (軽い)
     Loop TotalDays {
         a := A_Index 
         Click(pos.mX, pos.mY, "Right")  ; コピー元の薬剤のコンテクストメニューを表示
-        Sleep(SleepMenu)  ; コンテクストメニューの出現は取得できないので時間で待つしかない。
+        WaitContextMenu()
         Send("c")  ; 複製
         EnsureConfirm()  ; 確定ボタンの出現を待って確定する
         ConfirmDialogWithY("確認")  ; 引数のタイトルのダイアログのYボタンを押す。
         ; 複製した薬剤（target）を右クリック 
         Click(pos.targetX, pos.targetY, "Right")
-        Sleep(SleepMenu)
+        WaitContextMenu()
         ; --- メニュー選択（下3回 ＞ Enter） ---
         Send("{Down 3}{Enter}")
         ChangeDate(a)  ; a日ずらす    
@@ -50,6 +50,27 @@ SleepMove    := 150    ; 矢印キー(Down)などの移動待ち (軽い)
 }
 
 Esc::Exit
+
+; --- 右クリック後の出現監視関数 ---
+WaitContextMenu() {
+    Loop 20 { ; 最大2秒程度待機
+        ; 1. Window Spyと同じく「アクティブなクラス」を取得
+        try {
+            activeClass := WinGetClass("A")
+            activeCtrl  := ControlGetFocus("A")
+            
+            ; 2. 普段（メイン画面）とは違うクラス、または特定のコントロールが出現したか判定
+            ; ※ここでWindow Spyに表示された「メニュー出現時のクラス名」を指定
+            if InStr(activeClass, "WindowsForms10.Window.20808.app.") { 
+                return 
+            }
+        }
+        Sleep(100)
+    }
+    MsgBox("コンテクストメニューの取得できませんでした")
+    Exit ; 処理を中断して終了
+}
+
 
 GetTargetCoords() {
     MouseGetPos(&mX, &mY, &targetWin, &targetClassNN, 2) ; マウスカーソルの座標とその下のコントロールの属性を取得
