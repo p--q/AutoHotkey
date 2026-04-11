@@ -34,7 +34,7 @@ SleepMove    := 150    ; 矢印キー(Down)などの移動待ち (軽い)
     Loop TotalDays {
         a := A_Index 
         Click(pos.mX, pos.mY, "Right")  ; コピー元の薬剤のコンテクストメニューを表示
-        WaitContextMenu()
+        WaitContextMenu()  ; コンテクストメニューの出現を確認。
         Send("c")  ; 複製
         EnsureConfirm()  ; 確定ボタンの出現を待って確定する
         ConfirmDialogWithY("確認")  ; 引数のタイトルのダイアログのYボタンを押す。
@@ -104,7 +104,6 @@ EnsureConfirm() {  ; 確定ボタンの出現を待って確定する
     }
     MsgBox("確定ボタンが見つかりませんでした（複製失敗）")
     Exit ; 処理を中断して終了
-    }
 }
 
 ConfirmDialogWithY(DialogTitle) {  ; 引数のタイトルのダイアログのYボタンを押す。
