@@ -1,0 +1,14 @@
+#Requires AutoHotkey v2.0
+#include <UIA>
+
+; 診断用：アクティブウィンドウの全要素を書き出す
++F1:: {
+    try {
+        el := UIA.ElementFromHandle(WinActive("A"))
+        ; デスクトップにSSIの構造を保存します
+        FileAppend(el.Dump(), A_Desktop "\SSI_Structure.txt")
+        MsgBox("構造をデスクトップの SSI_Structure.txt に保存しました。")
+    } catch Error as e {
+        MsgBox("取得に失敗しました: " e.Message)
+    }
+}
