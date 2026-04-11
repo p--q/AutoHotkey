@@ -1,7 +1,7 @@
 /*
 【SSIルーチン作成補助スクリプト】
 ファイル名：SSI_Routine_Maker.ahk
-バージョン：3.0
+バージョン：3.1
 
 1920x1080の画面で最大化したときにセットメニューの点滴を6日分コピーする。
 コピーしたい点滴のチェックボックスのある枠でShift+右クリックで開始。
@@ -55,25 +55,20 @@ DialogTitle  := "確認"
         Click(mX, mY, "Right")  ; コピー元の薬剤のコンテクストメニューを表示
         Sleep(SleepMenu)  ; コンテクストメニューの出現は取得できないので時間で待つしかない。
         Send("c")  ; 複製
-        EnsureConfirm()  ;   
-       
-        
-        if WinWait(DialogTitle,, 0.5) {
-            Send("y")
-            Sleep(SleepAction)
-        }
-
-        ; --- 次の行（target）を右クリック ---
+        EnsureConfirm()  ; 確定ボタンの出現を待って確定する
+        ConfirmDialogWithY("確認")  ; 引数のタイトルのダイアログのYボタンを押す。
+        ; 複製した薬剤（target）を右クリック 
         Click(targetX, targetY, "Right")
         Sleep(SleepMenu)
-
         ; --- メニュー選択（下3回 ＞ Enter） ---
         Send("{Down 3}{Enter}")
-        ;Sleep(SleepAction) ; Enter後は画面が変わるためAction
+
 
 ; --- 日付選択ウィンドウの監視 ---
     isDateWindowFound := false
     dateWinTitle := "基準日から何日前後に登録するか選択"
+
+
 
     ; 最大3秒間（0.1秒 × 30回）ウィンドウの出現を待つ
     Loop 30 {
@@ -130,5 +125,12 @@ EnsureConfirm() {  ; 確定ボタンの出現を待って確定する
     }
     MsgBox("確定ボタンが見つかりませんでした（複製失敗）")
     Exit ; 処理を中断して終了
+    }
+}
+
+ConfirmDialogWithY(DialogTitle) {
+    if WinWait(DialogTitle,, 0.5) {
+        Send("y")
+        Sleep(SleepAction)
     }
 }
