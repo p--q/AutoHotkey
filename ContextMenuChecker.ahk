@@ -1,76 +1,48 @@
-; ============================================================
-; SSI電子カルテ コンテクストメニュー検出テストスクリプト（AHK v2）
-; 3方式を同時にチェックして、どれが反応するかを表示する
-; ============================================================
+/*
+【右クリックメニュー診断ツール v2.1】
+Shift + 左クリックで起動し、スクリプトが右クリックを行って診断します。
+*/
 
-#SingleInstance Force
+#Requires AutoHotkey v2.0
 
-global lastWinList := []
++LButton:: {
+    ; --- 準備 ---
+    CoordMode("Mouse", "Client")
+    MouseGetPos(&mX, &mY, &targetWin)
+    
+    ; --- 1. スクリプトの手で右クリック ---
+    Click(mX, mY, "Right")
+    
+    ; --- 2. 出現を待つ（あえて少し長めに待機） ---
+    Sleep(500)
+    
+    ; --- 3. 情報を取得 ---
+    activeHwnd  := WinActive("A")
+    activeClass := WinGetClass("ahk_id " . activeHwnd)
+    activeTitle := WinGetTitle("ahk_id " . activeHwnd)
+    
+    ; メインウィンドウのクラス名も比較用に取得
+    mainClass := WinGetClass("ahk_id " . targetWin)
 
-; 起動時に既存の WinForms ウィンドウ一覧を保存
-Init() {
-    global lastWinList := WinGetList("ahk_class WindowsForms10.Window.*")
-}
-Init()
-
-; 右クリック後に新規ウィンドウを検出
-~RButton::
-{
-    SetTimer(CheckNewWinFormsWindow, -80)
-}
-
-CheckNewWinFormsWindow() {
-    global lastWinList
-
-    newList := WinGetList("ahk_class WindowsForms10.Window.*")
-
-    for hwnd in newList {
-        if !(hwnd in lastWinList) {
-            ShowDetection("方式A：右クリック後に新規 WinForms ウィンドウを検出", hwnd)
-            lastWinList := newList
-            return
-        }
-    }
-}
-
-; 方式B：タイトルなし & 小さい WinForms ウィンドウを検出
-SetTimer(CheckSmallWinFormsWindow, 100)
-
-CheckSmallWinFormsWindow() {
-    winList := WinGetList("ahk_class WindowsForms10.Window.*")
-
-    for hwnd in winList {
-        title := WinGetTitle(hwnd)
-        if (title = "") {
-            rect := WinGetPos(hwnd)
-            w := rect[3], h := rect[4]
-
-            if (w < 500 && h < 700) {
-                ShowDetection("方式B：タイトルなし & 小型 WinForms ウィンドウを検出", hwnd)
-                return
-            }
-        }
-    }
+    ; --- 4. 結果表示 ---
+    resultText := "
+    (
+    【判定成功か？】: " (activeHwnd != targetWin ? "YES (別ウィンドウを検知)" : "NO (メイン画面のまま)") "
+    
+    ＜検出されたウィンドウ情報＞
+    ID (HWND): " activeHwnd "
+    クラス名: " activeClass "
+    タイトル: " (activeTitle = "" ? "(なし)" : activeTitle) "
+    
+    ＜比較用：メイン画面の情報＞
+    メインクラス: " mainClass "
+    
+    --- アドバイス ---
+    もし「判定成功か？」が NO なら、メニューがウィンドウとして認識されていません。
+    もしクラス名がメインと同じなら、ID(HWND)の差分で判定する必要があります。
+    )"
+    
+    MsgBox(resultText, "SSIメニュー診断結果")
 }
 
-; 方式C：項目ウィンドウ（20808.app.*）を直接検出
-SetTimer(CheckMenuItemWindow, 100)
-
-CheckMenuItemWindow() {
-    hwnd := WinExist("ahk_class WindowsForms10.Window.20808.app.*")
-    if hwnd {
-        ShowDetection("方式C：項目ウィンドウ（20808.app.*）を検出", hwnd)
-    }
-}
-
-; 検出結果を表示（重複表示防止）
-global lastDetected := 0
-
-ShowDetection(method, hwnd) {
-    global lastDetected
-    if (hwnd = lastDetected)
-        return
-
-    lastDetected := hwnd
-    MsgBox method "`nHWND: " hwnd
-}
+Esc::ExitApp
