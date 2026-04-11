@@ -16,7 +16,7 @@
 
 ; --- 詳細チューニング変数（ここを調整してください） ---
 TotalDays    := 6
-DelayKey     := 50     ; キーの押し下げ・間隔 (ms)
+
 
 SleepAfterC  := 500    ; 「c」キー入力後の待機 (クリティカル)
 SleepMenu    := 300    ; 右クリックメニューの描画待ち (やや重い)
@@ -28,60 +28,35 @@ DialogTitle  := "確認"
 
 #Requires AutoHotkey v2.0
 
-SendMode("Event")
-SetKeyDelay(DelayKey, DelayKey)
-
 +RButton:: {
     CoordMode("Mouse", "Client")
 
     ; 1. コントロール情報取得
-    MouseGetPos(&mX, &mY, &targetWin, &targetClassNN, 2)
+    MouseGetPos(&mX, &mY, &targetWin, &targetClassNN, 2) ; マウスカーソルの座標とその下のコントロールの属性を取得
     if (targetClassNN = "") {
         MsgBox("コントロール未検出", "SSI_Routine_Maker", "Icon!")
         return
     }
 
     try {
-        ControlGetPos(,,, &cH, targetClassNN, targetWin)
+        ControlGetPos(,,, &cH, targetClassNN, targetWin) ; 属性を渡してマウスカーソル下のコントロールの高さを取得
     } catch {
         MsgBox("座標取得失敗", "SSI_Routine_Maker", "Icon!")
         return
     }
 
+    ; 次のコントロール取得用の座標
     targetX := mX
     targetY := mY + cH
 
     Loop TotalDays {
         a := A_Index 
 
-        Click(mX, mY, "Right")
-        Sleep(SleepMenu)
-        
-        Send("c")
-isCopySuccess := false ; 複製の成否を管理するフラグ
-
-    ; 1. 最大5秒間（0.1秒 × 50回）「確定」ボタンを監視
-    Loop 50 {
-        ; SSIの内部名に合わせて "確定(&S)" または "確定" で判定
-        if ControlGetVisible("確定(&S)", "A") {
-            Sleep(50)  ; 描画の安定待ち
-            Send("!s")
-            isCopySuccess := true ; 複製に成功したフラグを立てる
-            break                 ; ループを抜けて次へ
-        }
-        Sleep(100)
-    }
-
-    ; 2. 複製に失敗した場合の安全装置
-    if (!isCopySuccess) {
-        MsgBox("確定ボタンが見つかりませんでした（複製失敗）")
-        return ; 処理を中断して終了
-    }
-        ;Sleep(SleepAfterC)
-
-        ; --- 現在の行を保存 ---
-        ;Send("!s")
-        Sleep(SleepAction)
+        Click(mX, mY, "Right")  ; コピー元の薬剤のコンテクストメニューを表示
+        Sleep(SleepMenu)  ; コンテクストメニューの出現は取得できないので時間で待つしかない。
+        Send("c")  ; 複製
+        EnsureConfirm()  ;   
+       
         
         if WinWait(DialogTitle,, 0.5) {
             Send("y")
@@ -139,4 +114,21 @@ isCopySuccess := false ; 複製の成否を管理するフラグ
     MsgBox(TotalDays "日分の複製が完了しました。", "SSI_Routine_Maker", "Iconi")
 }
 
-Esc::ExitApp
+Esc::Exit
+
+EnsureConfirm() {  ; 確定ボタンの出現を待って確定する
+    ; 最大5秒間（0.1秒 × 50回）「確定」ボタンを監視
+    Loop 50 {
+        ; SSIの内部名に合わせて "確定" で判定
+        if ControlGetVisible("確定", "A") {
+            Sleep(50)  ; 描画の安定待ち
+            Send("!s") ; 確定する
+            Sleep(SleepAction)
+            return
+        }
+        Sleep(100)
+    }
+    MsgBox("確定ボタンが見つかりませんでした（複製失敗）")
+    Exit ; 処理を中断して終了
+    }
+}
