@@ -1,48 +1,42 @@
 /*
-【右クリックメニュー診断ツール v2.1】
-Shift + 左クリックで起動し、スクリプトが右クリックを行って診断します。
+【右クリックメニュー診断ツール v2.2】
+変数展開を修正しました。
 */
 
 #Requires AutoHotkey v2.0
 
 +LButton:: {
-    ; --- 準備 ---
     CoordMode("Mouse", "Client")
-    MouseGetPos(&mX, &mY, &targetWin)
     
-    ; --- 1. スクリプトの手で右クリック ---
+    ; 1. 起動時のメインウィンドウを特定
+    MouseGetPos(&mX, &mY, &targetWin)
+    mainClass := WinGetClass("ahk_id " . targetWin)
+    
+    ; 2. スクリプトが右クリックを送る
     Click(mX, mY, "Right")
     
-    ; --- 2. 出現を待つ（あえて少し長めに待機） ---
+    ; 3. メニュー生成を待つ
     Sleep(500)
     
-    ; --- 3. 情報を取得 ---
+    ; 4. アクティブなウィンドウの情報を取得
     activeHwnd  := WinActive("A")
     activeClass := WinGetClass("ahk_id " . activeHwnd)
     activeTitle := WinGetTitle("ahk_id " . activeHwnd)
     
-    ; メインウィンドウのクラス名も比較用に取得
-    mainClass := WinGetClass("ahk_id " . targetWin)
+    ; 5. 判定
+    isDifferent := (activeHwnd != targetWin) ? "YES (別ウィンドウを検知)" : "NO (メイン画面のまま)"
 
-    ; --- 4. 結果表示 ---
-    resultText := "
-    (
-    【判定成功か？】: " (activeHwnd != targetWin ? "YES (別ウィンドウを検知)" : "NO (メイン画面のまま)") "
-    
-    ＜検出されたウィンドウ情報＞
-    ID (HWND): " activeHwnd "
-    クラス名: " activeClass "
-    タイトル: " (activeTitle = "" ? "(なし)" : activeTitle) "
-    
-    ＜比較用：メイン画面の情報＞
-    メインクラス: " mainClass "
-    
-    --- アドバイス ---
-    もし「判定成功か？」が NO なら、メニューがウィンドウとして認識されていません。
-    もしクラス名がメインと同じなら、ID(HWND)の差分で判定する必要があります。
-    )"
-    
-    MsgBox(resultText, "SSIメニュー診断結果")
+    ; --- 結果を組み立て（v2の式展開フォーマット） ---
+    res := "【判定結果】: " . isDifferent . "`n`n"
+    res .= "＜検出されたウィンドウ情報＞`n"
+    res .= "ID (HWND): " . activeHwnd . "`n"
+    res .= "クラス名: " . activeClass . "`n"
+    res .= "タイトル: " . (activeTitle = "" ? "(なし)" : activeTitle) . "`n`n"
+    res .= "＜比較用：メイン画面の情報＞`n"
+    res .= "メインID: " . targetWin . "`n"
+    res .= "メインクラス: " . mainClass
+
+    MsgBox(res, "SSIメニュー診断結果")
 }
 
 Esc::ExitApp
