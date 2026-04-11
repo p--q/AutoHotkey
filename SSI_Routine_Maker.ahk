@@ -16,7 +16,7 @@
 
 ; --- 詳細チューニング変数（ここを調整してください） ---
 TotalDays    := 6
-;DelayKey     := 50     ; キーの押し下げ・間隔 (ms)
+DelayKey     := 50     ; キーの押し下げ・間隔 (ms)
 
 SleepAfterC  := 500    ; 「c」キー入力後の待機 (クリティカル)
 SleepMenu    := 300    ; 右クリックメニューの描画待ち (やや重い)
@@ -28,8 +28,8 @@ DialogTitle  := "確認"
 
 #Requires AutoHotkey v2.0
 
-;SendMode("Event")
-;SetKeyDelay(DelayKey, DelayKey)
+SendMode("Event")
+SetKeyDelay(DelayKey, DelayKey)
 
 +RButton:: {
     CoordMode("Mouse", "Client")
@@ -58,10 +58,29 @@ DialogTitle  := "確認"
         Sleep(SleepMenu)
         
         Send("c")
-        Sleep(SleepAfterC)
+isCopySuccess := false ; 複製の成否を管理するフラグ
+
+    ; 1. 最大5秒間（0.1秒 × 50回）「確定」ボタンを監視
+    Loop 50 {
+        ; SSIの内部名に合わせて "確定(&S)" または "確定" で判定
+        if ControlGetVisible("確定(&S)", "A") {
+            Sleep(50)  ; 描画の安定待ち
+            Send("!s")
+            isCopySuccess := true ; 複製に成功したフラグを立てる
+            break                 ; ループを抜けて次へ
+        }
+        Sleep(100)
+    }
+
+    ; 2. 複製に失敗した場合の安全装置
+    if (!isCopySuccess) {
+        MsgBox("確定ボタンが見つかりませんでした（複製失敗）")
+        return ; 処理を中断して終了
+    }
+        ;Sleep(SleepAfterC)
 
         ; --- 現在の行を保存 ---
-        Send("!s")
+        ;Send("!s")
         Sleep(SleepAction)
         
         if WinWait(DialogTitle,, 0.5) {
@@ -75,18 +94,43 @@ DialogTitle  := "確認"
 
         ; --- メニュー選択（下3回 ＞ Enter） ---
         Send("{Down 3}{Enter}")
-        Sleep(SleepAction) ; Enter後は画面が変わるためAction
+        ;Sleep(SleepAction) ; Enter後は画面が変わるためAction
+
+; --- 日付選択ウィンドウの監視 ---
+    isDateWindowFound := false
+    dateWinTitle := "基準日から何日前後に登録するか選択"
+
+    ; 最大3秒間（0.1秒 × 30回）ウィンドウの出現を待つ
+    Loop 30 {
+        if WinExist(dateWinTitle) {
+            ;WinActivate(dateWinTitle) ; 確実に操作できるようアクティブ化
+            ;Sleep(100)                ; アクティブ化直後の安定待ち
+            
+            Send("{Down " . a . "}")
+            ;Send("{Enter}")           ; 選択を確定（必要に応じて）
+            
+            isDateWindowFound := true
+            break
+        }
+        Sleep(100)
+    }
+
+    ; ウィンドウが出現しなかったら終了
+    if (!isDateWindowFound) {
+        MsgBox("日付選択ウィンドウが出現しませんでした。処理を終了します。")
+        return
+    }
+
+
+
 
         ; --- 日付選択（下a回） ---
-        Send("{Down " . a . "}")
+        ;Send("{Down " . a . "}")
         Sleep(SleepMove)   ; 単なる選択移動なのでMove（短めでOK）
         
         ; --- 保存 ---
         Send("!s")
-        if WinWait(DialogTitle,, 0.5) {
-            Send("y")
-            Sleep(SleepAction)
-        }
+
         
         Sleep(SleepMove)
 
