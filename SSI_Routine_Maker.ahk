@@ -10,7 +10,7 @@
 TotalDays   := 6
 DialogTitle := "確認"  ; 先頭が「確認」で始まるウィンドウを待機
 ; コンテキストメニューのクラス名
-MenuClass   := "ahk_class Windows.Forms10.Window.20808.app."
+MenuClass   := "ahk_class WindowsForms10.Window.20808.app."
 ; 確定ボタンのテキスト（先頭が「確定(&S)」で始まるボタン）
 BtnConfirm  := "確定(&S)"
 ; 日付選択ウィンドウのタイトル
