@@ -54,15 +54,10 @@ Esc::Exit
 ; --- 右クリック後の出現監視関数 ---
 WaitContextMenu() {
     Loop 20 { ; 最大2秒程度待機
-        ; 1. マウスの現在座標にあるウィンドウとコントロールを取得
-        ; OutputVarWin: ウィンドウハンドル(HWND)
-        ; OutputVarControl: コントロールのClassNN
-        MouseGetPos(,, &mHwnd, &mCtrl)
+        MouseGetPos(,, &mHwnd)
         if (mHwnd) {
-            ; 2. そのウィンドウハンドルからクラス名を取得
             try {
                 mClass := WinGetClass(mHwnd)
-                ; 4. Window Spyで特定した「固定部分」が含まれているか判定
                 if InStr(mClass, "WindowsForms10.Window.20808.app.") {
                     return
                 }
