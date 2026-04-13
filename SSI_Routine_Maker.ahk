@@ -61,7 +61,7 @@ WaitContextMenu() {
         if (mHwnd) {
             ; 2. そのウィンドウハンドルからクラス名を取得
             try {
-                mClass := WinGetClass("ahk_id " mHwnd)
+                mClass := WinGetClass(mHwnd)
                 ; 4. Window Spyで特定した「固定部分」が含まれているか判定
                 if InStr(mClass, "WindowsForms10.Window.20808.app.") {
                     return
