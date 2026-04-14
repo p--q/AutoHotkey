@@ -1,11 +1,11 @@
 /*
  * @title SSI_Routine_Maker.ahk
- * @version 3.4
+ * @version 3.5
  * @author Gemini
  * @description 
- * 1. メニューが出るまで右クリックをリトライする機能を追加
- * 2. 確定ボタンをアクティブウィンドウ全体から走査するハイブリッド方式
- * 3. 失敗時は直ちに ExitApp または Exit で処理を中断
+ * 1. アクティブウィンドウ取得("A")を使わず、マウス下のハンドル(parentWin)のみを使用。
+ * 2. メニューが出るまで右クリックをリトライ。
+ * 3. 確定ボタンが見つからない、またはウィンドウが出ない場合は即座に Exit。
  */
 
 #Requires AutoHotkey v2.0
@@ -15,7 +15,7 @@ TotalDays := 6
 +RButton:: {
     CoordMode("Mouse", "Client")
     
-    ; 1. 複製元(src)と複製先(dest)の座標を取得
+    ; 1. 座標とハンドルの初期取得
     pos := GetDrugCoords()
     
     Loop TotalDays {
@@ -26,14 +26,14 @@ TotalDays := 6
         Sleep(100)
         Send("c") ; 複製(C)
         
-        ; --- B. 確定ボタンを探して Alt+S ---
+        ; --- B. 確定ボタンを走査（マウス下のウィンドウを基準にする） ---
         EnsureConfirmAndClick()
         
         ; --- C. 確認ダイアログ応答 ---
         ConfirmDialogWithY("確認")
         
         ; --- D. 複製された薬剤（1行下）を右クリック（出るまでリトライ） ---
-        Sleep(400) ; 描画安定のための待ち
+        Sleep(400) 
         WaitContextMenu(pos.destX, pos.destY)
         
         ; メニュー選択（下3回 ＞ Enter）
@@ -42,7 +42,7 @@ TotalDays := 6
         ; --- E. 日付変更処理 ---
         ChangeDate(currentDay)
         
-        Sleep(600) ; 次のループへのインターバル
+        Sleep(600)
     }
     
     MsgBox(TotalDays "日分の複製が完了しました。", "SSI_Routine_Maker", "Iconi")
@@ -51,19 +51,18 @@ TotalDays := 6
 ; 緊急停止
 Esc::ExitApp
 
-; --- 以下、機能関数 ---
+; --- 関数群 ---
 
 GetDrugCoords() {
-    ; マウス下のハンドル取得
+    ; マウス下のハンドルを取得（引数2でHWNDを取得）
     MouseGetPos(&mX, &mY, &srcWin, &srcClassNN, 2)
     
     if !(srcClassNN) {
-        MsgBox("薬剤コントロールが検出できませんでした。")
+        MsgBox("薬剤コントロールを検出できません。")
         Exit
     }
 
     try {
-        ; コントロールの高さを取得
         ControlGetPos(,,, &cH, srcClassNN, srcWin)
     } catch {
         MsgBox("座標情報の取得に失敗。")
@@ -79,22 +78,21 @@ GetDrugCoords() {
 }
 
 WaitContextMenu(clickX, clickY) {
-    Loop 20 { ; 最大20回リトライ
+    Loop 20 {
         Click(clickX, clickY, "Right")
-        Sleep(300) ; メニュー描画待ち
+        Sleep(300)
         
+        ; マウス下のハンドルからクラスを直接判定
         MouseGetPos(,, &mHwnd)
         if (mHwnd) {
             try {
-                mClass := WinGetClass(mHwnd)
-                ; WindowsForms系のメニュークラスを検知
-                if InStr(mClass, "WindowsForms10.Window.20808")
+                if InStr(WinGetClass(mHwnd), "WindowsForms10.Window.20808")
                     return 
             }
         }
         Sleep(200)
     }
-    MsgBox("コンテキストメニューを表示できませんでした。")
+    MsgBox("メニューが表示されませんでした。")
     Exit
 }
 
@@ -102,28 +100,14 @@ EnsureConfirmAndClick() {
     targetBtnText := "確定(&S)"
     
     Loop 50 { ; 最大5秒
-        ; アクティブウィンドウをターゲットにする
-        activeWin := WinExist("A")
+        ; ★SSI対策: アクティブウィンドウ("A")ではなく、マウス下のウィンドウを取得
+        MouseGetPos(,, &parentWin)
         
-        if (activeWin) {
-            for hCtrl in WinGetControlsHwnd(activeWin) {
+        if (parentWin) {
+            ; parentWinの子コントロールを全走査
+            for hCtrl in WinGetControlsHwnd(parentWin) {
                 try {
-                    txt := ControlGetText(hCtrl)
-                    ; 部分一致で判定
-                    if (InStr(txt, "確定") && ControlGetVisible(hCtrl)) {
-                        Send("!s")
-                        return
-                    }
-                }
-            }
-        }
-        
-        ; 念のためマウス下のウィンドウも補完的に走査
-        MouseGetPos(,, &mWin)
-        if (mWin && mWin != activeWin) {
-            for hCtrl in WinGetControlsHwnd(mWin) {
-                try {
-                    if (InStr(ControlGetText(hCtrl), "確定") && ControlGetVisible(hCtrl)) {
+                    if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
                         Send("!s")
                         return
                     }
@@ -132,12 +116,13 @@ EnsureConfirmAndClick() {
         }
         Sleep(100)
     }
-    MsgBox("確定ボタンを見失いました。")
+    MsgBox("確定ボタンが見つかりませんでした。")
     Exit
 }
 
 ConfirmDialogWithY(DialogTitle) {
-    ; ダイアログは出ない場合もあるので Exit はせずタイムアウトで次へ
+    ; ここはシステムメッセージボックスの場合、WinWaitが効く可能性があります。
+    ; もし効かない場合はWinExist(DialogTitle)のLoopに書き換えますが、一旦WinWaitで保持します。
     if WinWait(DialogTitle,, 1.5) {
         Sleep(200)
         Send("y")
@@ -147,6 +132,7 @@ ConfirmDialogWithY(DialogTitle) {
 ChangeDate(dayOffset) {
     dateWinTitle := "基準日から何日前後に登録するか選択"
     Loop 30 {
+        ; WinExistでもタイトル指定であればハンドルを介さず捕捉できることが多いです
         if WinExist(dateWinTitle) {
             Sleep(300)
             Send("{Down " . dayOffset . "}{Enter}{Enter}")
