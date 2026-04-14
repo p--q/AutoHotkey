@@ -99,3 +99,62 @@ WaitContextMenu(clickX, clickY) {
 }
 
 EnsureConfirmAndClick() {
+    targetBtnText := "確定(&S)"
+    
+    Loop 50 { ; 最大5秒
+        ; アクティブウィンドウをターゲットにする
+        activeWin := WinExist("A")
+        
+        if (activeWin) {
+            for hCtrl in WinGetControlsHwnd(activeWin) {
+                try {
+                    txt := ControlGetText(hCtrl)
+                    ; 部分一致で判定
+                    if (InStr(txt, "確定") && ControlGetVisible(hCtrl)) {
+                        Send("!s")
+                        return
+                    }
+                }
+            }
+        }
+        
+        ; 念のためマウス下のウィンドウも補完的に走査
+        MouseGetPos(,, &mWin)
+        if (mWin && mWin != activeWin) {
+            for hCtrl in WinGetControlsHwnd(mWin) {
+                try {
+                    if (InStr(ControlGetText(hCtrl), "確定") && ControlGetVisible(hCtrl)) {
+                        Send("!s")
+                        return
+                    }
+                }
+            }
+        }
+        Sleep(100)
+    }
+    MsgBox("確定ボタンを見失いました。")
+    Exit
+}
+
+ConfirmDialogWithY(DialogTitle) {
+    ; ダイアログは出ない場合もあるので Exit はせずタイムアウトで次へ
+    if WinWait(DialogTitle,, 1.5) {
+        Sleep(200)
+        Send("y")
+    }
+}
+
+ChangeDate(dayOffset) {
+    dateWinTitle := "基準日から何日前後に登録するか選択"
+    Loop 30 {
+        if WinExist(dateWinTitle) {
+            Sleep(300)
+            Send("{Down " . dayOffset . "}{Enter}{Enter}")
+            WinWaitClose(dateWinTitle,, 2)
+            return
+        }
+        Sleep(100)
+    }
+    MsgBox("日付選択ウィンドウが出現しませんでした。")
+    Exit
+}
