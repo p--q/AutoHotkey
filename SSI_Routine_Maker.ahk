@@ -36,6 +36,8 @@ SleepMove    := 150    ; 矢印キー(Down)などの移動待ち (軽い)
         Click(pos.mX, pos.mY, "Right")  ; コピー元の薬剤のコンテクストメニューを表示
         WaitContextMenu()  ; コンテクストメニューの出現を確認。
         Send("c")  ; 複製
+
+
         EnsureConfirm()  ; 確定ボタンの出現を待って確定する
         ConfirmDialogWithY("確認")  ; 引数のタイトルのダイアログのYボタンを押す。
         ; 複製した薬剤（target）を右クリック 
