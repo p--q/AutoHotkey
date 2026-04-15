@@ -1,11 +1,17 @@
 /*
  * @title SSI_Routine_Maker.ahk
- * @version 4.1
+ * @version 5.0
+ * @author Gemini
  * @description 
- * 1. 1920x1080画面対応。点滴チェックボックス枠で Shift+右クリック すると
- * 6日分の複製と日付ずらしを自動実行します。
- * 2. 中断ホットキーを Exit に変更。
- * 3. 確定プロセスの異常時は ExecuteFullConfirmation 内で Exit 実行。
+ * 【SSI専用ルーチン】
+ * 1920x1080の画面で最大化したときにセットメニューの点滴を6日分コピーします。
+ * コピーしたい点滴のチェックボックスのある枠上で「Shift+右クリック」すると開始します。
+ * * 仕組み:
+ * 1. 薬剤の1行下の座標をコントロールの高さから自動計算します。
+ * 2. コンテキストメニューが出るまで右クリックをリトライします。
+ * 3. 確定ボタンをマウス下のウィンドウハンドル(HWND)から全走査して特定します。
+ * 4. 日付選択ウィンドウで指定日数分だけDownキーを送り日付をずらします。
+ * * 中止したい場合は「Esc」キーを押してください。
  */
 
 #Requires AutoHotkey v2.0
@@ -13,129 +19,136 @@
 TotalDays := 6
 
 +RButton:: {
-    CoordMode("Mouse", "Client")
+    CoordMode("Mouse", "Screen")
     
-    ; 1. 座標情報を取得（ユーザーのクリック位置を維持）
+    ; 1. 複製元(src)と複製先(dest)の座標・ハンドルを取得
     pos := GetDrugCoords()
     
     Loop TotalDays {
         currentDay := A_Index
         
-        ; --- A. 複製元の薬剤を右クリック ---
+        ; --- A. 複製元の薬剤を右クリック（出るまでリトライ） ---
         WaitContextMenu(pos.srcX, pos.srcY)
-        Sleep(200)
-        Send("c") ; 複製(C)
+        Sleep(100)
+        Send("c") ; 複製(C)を実行
         
-        ; --- B. 確定ボタン～確認ダイアログの同期処理 ---
-        ; 失敗時は関数内の Exit でルーチン全体が止まります
-        ExecuteFullConfirmation("確認")
+        ; --- B. 確定ボタンを走査（マウス下のウィンドウを基準にする） ---
+        EnsureConfirmAndClick()
         
-        ; --- C. 複製された薬剤（1行下）を操作 ---
-        Sleep(1200) 
+        ; --- C. 確認ダイアログ応答 ---
+        ConfirmDialogWithY("確認")
+        
+        ; --- D. 複製された薬剤（1行下）を右クリック（出るまでリトライ） ---
+        Sleep(400) 
         WaitContextMenu(pos.destX, pos.destY)
         
-        Sleep(300)
+        ; メニュー選択（下3回 ＞ Enter）
         Send("{Down 3}{Enter}")
         
-        ; --- D. 日付変更ウィンドウ処理 ---
+        ; --- E. 日付変更処理 ---
         ChangeDate(currentDay)
         
-        Sleep(1000)
+        Sleep(600)
     }
     
     MsgBox(TotalDays "日分の複製が完了しました。", "SSI_Routine_Maker", "Iconi")
 }
 
-; 実行中スレッドのみ中断（スクリプトは常駐継続）
-Esc::Exit
+; 緊急停止
+Esc::ExitApp
 
-; --- 関数群 ---
+; --- 以下、機能関数群 ---
 
 GetDrugCoords() {
+    ; マウス下のコントロール情報を取得（引数2によりHWNDで取得）
     MouseGetPos(&mX, &mY, &srcWin, &srcClassNN, 2)
+    
     if !(srcClassNN) {
-        MsgBox("薬剤コントロール検出失敗")
+        MsgBox("薬剤のコントロールを検出できませんでした。", "SSI_Routine_Maker")
         Exit
     }
+
     try {
+        ; コントロールの高さを取得して、1行下の座標を算出
         ControlGetPos(,,, &cH, srcClassNN, srcWin)
     } catch {
-        MsgBox("座標取得失敗")
+        MsgBox("座標情報の取得に失敗しました。", "SSI_Routine_Maker")
         Exit
     }
-    return {srcX: mX, srcY: mY, destX: mX, destY: mY + cH}
+
+    return {
+        srcX: mX, 
+        srcY: mY, 
+        destX: mX, 
+        destY: mY + cH
+    }
 }
 
-ExecuteFullConfirmation(DialogTitle) {
+WaitContextMenu(clickX, clickY) {
+    Loop 20 {
+        Click(clickX, clickY, "Right")
+        Sleep(300)
+        
+        ; マウス下のハンドルからクラス名を直接判定（アクティブウィンドウに頼らない）
+        MouseGetPos(,, &mHwnd)
+        if (mHwnd) {
+            try {
+                if InStr(WinGetClass(mHwnd), "WindowsForms10.Window.20808")
+                    return ; メニュー出現を確認
+            }
+        }
+        Sleep(200)
+    }
+    MsgBox("コンテキストメニューが表示されませんでした。", "SSI_Routine_Maker")
+    Exit
+}
+
+EnsureConfirmAndClick() {
     targetBtnText := "確定(&S)"
-    btnHwnd := 0
     
-    ; 1. 確定ボタン出現待ち
-    startTime := A_TickCount
-    Loop 50 {
-        MouseGetPos(,, &pWin)
-        if (pWin) {
-            for hCtrl in WinGetControlsHwnd(pWin) {
+    Loop 50 { ; 最大5秒間監視
+        ; マウス下のウィンドウ（親）を起点に子コントロールを走査
+        MouseGetPos(,, &parentWin)
+        
+        if (parentWin) {
+            for hCtrl in WinGetControlsHwnd(parentWin) {
                 try {
+                    ; テキストと可視状態を確認
                     if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
-                        btnHwnd := hCtrl
-                        break 2
+                        Send("!s")
+                        return
                     }
                 }
             }
         }
         Sleep(100)
     }
-    
-    if !btnHwnd {
-        MsgBox("確定ボタンが見つかりませんでした。")
-        Exit ; ここでスレッドを終了
-    }
-
-    ; 2. 確定ボタン押下 ＆ 消失待ち
-    Sleep(200)
-    Send("!s")
-    while (ControlGetVisible(btnHwnd) && A_TickCount - startTime < 8000) {
-        Sleep(100)
-    }
-
-    ; 3. 確認ダイアログ出現 ＆ 消失待ち
-    if WinWait(DialogTitle,, 3) {
-        Sleep(500)
-        Send("y")
-        if !WinWaitClose(DialogTitle,, 5) {
-            MsgBox("確認ダイアログが閉じませんでした。")
-            Exit ; ここでスレッドを終了
-        }
-        Sleep(500)
-        return ; 成功
-    }
-    
-    MsgBox("確認ダイアログが出現しませんでした。")
-    Exit ; ここでスレッドを終了
+    MsgBox("確定ボタンが見つかりませんでした。", "SSI_Routine_Maker")
+    Exit
 }
 
-WaitContextMenu(clickX, clickY) {
-    Loop 30 {
-        Click(clickX, clickY, "Right")
-        Sleep(500)
-        MouseGetPos(,, &mHwnd)
-        if (mHwnd && InStr(WinGetClass(mHwnd), "WindowsForms10.Window.20808"))
-            return 
+ConfirmDialogWithY(DialogTitle) {
+    ; 標準的なダイアログであればタイトル指定のWinWaitが有効
+    if WinWait(DialogTitle,, 1.5) {
         Sleep(200)
+        Send("y")
     }
-    MsgBox("メニュー表示タイムアウト")
-    Exit
 }
 
 ChangeDate(dayOffset) {
     dateWinTitle := "基準日から何日前後に登録するか選択"
-    if WinWait(dateWinTitle,, 5) {
-        Sleep(500)
-        Send("{Down " . dayOffset . "}{Enter}{Enter}")
-        WinWaitClose(dateWinTitle,, 3)
-        return
+    Loop 30 {
+        if WinExist(dateWinTitle) {
+            Sleep(300)
+            ; dayOffset分だけDownして確定
+            Send("{Down " . dayOffset . "}{Enter}{Enter}")
+            
+            ; 次のループへ行く前にウィンドウが閉じるのを待つ
+            WinWaitClose(dateWinTitle,, 2)
+            return
+        }
+        Sleep(100)
     }
-    MsgBox("日付選択ウィンドウタイムアウト")
+    MsgBox("日付選択ウィンドウが出現しませんでした。", "SSI_Routine_Maker")
     Exit
 }
