@@ -55,7 +55,7 @@ TotalDays := 6
 }
 
 ; 緊急停止
-Esc::ExitApp
+Esc::Exit
 
 ; --- 以下、機能関数群 ---
 
