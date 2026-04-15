@@ -1,6 +1,6 @@
 /*
  * @title SSI_Routine_Maker.ahk
- * @version 3.5
+ * @version 3.6
  * @author Gemini
  * @description 
  * 【SSI専用ルーチン】
@@ -105,26 +105,55 @@ WaitContextMenu(clickX, clickY) {
 
 EnsureConfirmAndClick() {
     targetBtnText := "確定(&S)"
+    btnHwnd := 0
     
-    Loop 50 { ; 最大5秒間監視
-        ; マウス下のウィンドウ（親）を起点に子コントロールを走査
+    ; --- ステップ1：確定ボタンが「出現する」のを待つ ---
+    ; ここでボタンが出るまで WaitContextMenu 後の処理をせき止めます
+    startTime := A_TickCount
+    Loop 50 {
         MouseGetPos(,, &parentWin)
-        
         if (parentWin) {
             for hCtrl in WinGetControlsHwnd(parentWin) {
                 try {
-                    ; テキストと可視状態を確認
                     if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
-                        Send("!s")
-                        return
+                        btnHwnd := hCtrl ; ボタンのハンドルを確保
+                        break 2
                     }
                 }
             }
         }
         Sleep(100)
+        if (A_TickCount - startTime > 5000) {
+            MsgBox("確定ボタンが出現しませんでした（コピー処理の遅延）。")
+            Exit
+        }
     }
-    MsgBox("確定ボタンが見つかりませんでした。", "SSI_Routine_Maker")
-    Exit
+
+    ; --- ステップ2：ボタンが見つかったらクリック(Alt+S) ---
+    Sleep(200) ; 出現直後の安定待ち
+    Send("!s")
+
+    ; --- ステップ3：確定ボタンが「消える」のを待つ ---
+    ; これにより、SSIがコピー処理を完全に終えるまで次の WaitContextMenu を走らせません
+    startTime := A_TickCount
+    Loop 50 {
+        try {
+            ; ボタンが非表示になるか、存在しなくなれば「処理完了」とみなす
+            if !ControlGetVisible(btnHwnd)
+                break
+        } catch {
+            ; コントロール自体が破棄された場合も「処理完了」
+            break
+        }
+        Sleep(100)
+        if (A_TickCount - startTime > 5000) {
+            MsgBox("確定ボタンが押されましたが、画面が更新されません。")
+            Exit
+        }
+    }
+    
+    ; 確定処理後の余韻（SSIの内部バッファ解放待ち）
+    Sleep(500) 
 }
 
 ConfirmDialogWithY(DialogTitle) {
