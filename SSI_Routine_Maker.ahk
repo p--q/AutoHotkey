@@ -1,6 +1,6 @@
 /*
  * @title SSI_Routine_Maker.ahk
- * @version 5.0
+ * @version 5.1
  * @author Gemini
  * @description 
  * 【SSI専用ルーチン】
@@ -35,9 +35,6 @@ TotalDays := 6
         ; --- B. 確定ボタンを走査（マウス下のウィンドウを基準にする） ---
         EnsureConfirmAndClick()
         
-        ; --- C. 確認ダイアログ応答 ---
-        ConfirmDialogWithY("確認")
-        
         ; --- D. 複製された薬剤（1行下）を右クリック（出るまでリトライ） ---
         Sleep(400) 
         WaitContextMenu(pos.destX, pos.destY)
@@ -55,7 +52,7 @@ TotalDays := 6
 }
 
 ; 緊急停止
-Esc::ExitApp
+Esc::Exit
 
 ; --- 以下、機能関数群 ---
 
@@ -116,7 +113,17 @@ EnsureConfirmAndClick() {
                     ; テキストと可視状態を確認
                     if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
                         Send("!s")
-                        return
+                        Sleep(100)
+                        ; --- C. 確認ダイアログ応答 ---
+                        ConfirmDialogWithY("確認")
+                        Loop 50 {
+                            if (!ControlGetVisible(hCtrl)) {
+                                return 
+                            }
+                            Sleep(100)
+                        }
+                        MsgBox("確定ボタンの実行を確認できませんでした。", "SSI_Routine_Maker")
+                        Exit
                     }
                 }
             }
