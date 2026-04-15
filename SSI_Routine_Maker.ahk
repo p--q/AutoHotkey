@@ -102,4 +102,85 @@ GetDrugCoords() {
     return {srcX: mX, srcY: mY, destX: mX, destY: mY + cH}
 }
 
-WaitContextMenu(clickX, clickY
+WaitContextMenu(clickX, clickY) {
+    Loop 20 {
+        currentTry := A_Index
+        Click(clickX, clickY, "Right")
+        Sleep(300)
+        
+        MouseGetPos(,, &mHwnd)
+        if (mHwnd) {
+            try {
+                if InStr(WinGetClass(mHwnd), "WindowsForms10.Window.20808")
+                    return {tries: currentTry}
+            }
+        }
+        Sleep(200)
+    }
+    MsgBox("右クリックメニュー待機タイムアウト")
+    Exit
+}
+
+EnsureConfirmAndClick() {
+    targetBtnText := "確定(&S)"
+    res := {btnAppMs: 0, btnAppTry: 0, diagCloseMs: 0}
+    
+    tStart := A_TickCount
+    Loop 50 {
+        currentBtnTry := A_Index
+        MouseGetPos(,, &parentWin)
+        if (parentWin) {
+            for hCtrl in WinGetControlsHwnd(parentWin) {
+                try {
+                    if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
+                        res.btnAppMs := A_TickCount - tStart
+                        res.btnAppTry := currentBtnTry
+                        
+                        Sleep(100)
+                        Send("!s")
+                        Sleep(100)
+                        
+                        ConfirmDialogWithY("確認")
+                        
+                        tWaitClose := A_TickCount
+                        Loop 50 {
+                            if (!ControlGetVisible(hCtrl)) {
+                                res.diagCloseMs := A_TickCount - tWaitClose
+                                return res
+                            }
+                            Sleep(100)
+                        }
+                    }
+                }
+            }
+        }
+        Sleep(100)
+    }
+    MsgBox("確定ボタン検出タイムアウト")
+    Exit
+}
+
+ConfirmDialogWithY(DialogTitle) {
+    if WinWait(DialogTitle,, 1.5) {
+        Sleep(200)
+        Send("y")
+    }
+}
+
+ChangeDate(dayOffset) {
+    dateWinTitle := "基準日から何日前後に登録するか選択"
+    tStart := A_TickCount
+    Loop 30 {
+        currentTry := A_Index
+        if WinExist(dateWinTitle) {
+            resMs := A_TickCount - tStart
+            Sleep(300)
+            Send("{Down " . dayOffset . "}{Enter}{Enter}")
+            WinWaitClose(dateWinTitle,, 2)
+            return {tries: currentTry, ms: resMs}
+        }
+        Sleep(100)
+    }
+    MsgBox("日付窓検出タイムアウト")
+    Exit
+}
