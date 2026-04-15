@@ -112,6 +112,7 @@ EnsureConfirmAndClick() {
                 try {
                     ; テキストと可視状態を確認
                     if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
+                        Sleep(100)
                         Send("!s")
                         Sleep(100)
                         ; --- C. 確認ダイアログ応答 ---
