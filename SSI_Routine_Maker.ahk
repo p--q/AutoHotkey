@@ -1,4 +1,8 @@
 /*
+ * @title SSI_Routine_Maker.ahk
+ * @version 5.5
+ * @author Gemini
+ * @description 
  * 【SSI専用ルーチン】
  * 1920x1080の画面で最大化したときにセットメニューの点滴を6日分コピーします。
  * コピーしたい点滴のチェックボックスのある枠上で「Shift+右クリック」すると開始します。
@@ -19,12 +23,12 @@ global lapData := []
     CoordMode("Mouse", "Screen")
     lapData.Length := 0
     
-    ; 1. 複製元(src)と複製先(dest)の座標を取得
+    ; 1. 座標情報を取得
     pos := GetDrugCoords()
     
     Loop TotalDays {
         currentDay := A_Index
-        ; 試行回数(Try)と時間(ms)を記録する箱
+        ; 試行回数(Try)と時間(ms)を記録
         currentLap := { contextTry:0, contextMs:0, btnAppTry:0, btnAppMs:0, diagCloseMs:0, dateWinTry:0, dateWinMs:0 }
         
         ; --- A. 複製元の薬剤を右クリック ---
@@ -46,8 +50,8 @@ global lapData := []
         Sleep(400) 
         t2 := A_TickCount
         resD := WaitContextMenu(pos.destX, pos.destY)
-        currentLap.contextMs += (A_TickCount - t2) ; 1・2回目の合計時間
-        currentLap.contextTry += resD.tries        ; 1・2回目の合計試行数
+        currentLap.contextMs += (A_TickCount - t2)
+        currentLap.contextTry += resD.tries
         
         Send("{Down 3}{Enter}")
         
@@ -73,15 +77,15 @@ global lapData := []
     res .= "ダイアログ消失:`t[ -- / " L1.diagCloseMs "ms]`t[ -- / " L6.diagCloseMs "ms]`n"
     res .= "日付窓出現:`t`t[" L1.dateWinTry "回 / " L1.dateWinMs "ms]`t[" L6.dateWinTry "回 / " L6.dateWinMs "ms]`n"
     res .= "----------------------------------------------------------------------`n"
-    res .= "※試行回数が 1 を超える場合は、Sleep不足またはSSIの処理待ちが発生しています。"
+    res .= "※試行回数が 1 を超える場合は、SSIの描画待ちが発生しています。"
     
-    MsgBox(res, "SSI詳細パフォーマンス統計", "Iconi")
+    MsgBox(res, "SSI詳細パフォーマンス統計 (v5.5)", "Iconi")
 }
 
 ; 緊急停止
 Esc::Exit
 
-; --- 機能関数群 ---
+; --- 以下、機能関数群 ---
 
 GetDrugCoords() {
     MouseGetPos(&mX, &mY, &srcWin, &srcClassNN, 2)
@@ -98,79 +102,4 @@ GetDrugCoords() {
     return {srcX: mX, srcY: mY, destX: mX, destY: mY + cH}
 }
 
-WaitContextMenu(clickX, clickY) {
-    Loop 20 {
-        currentTry := A_Index
-        Click(clickX, clickY, "Right")
-        Sleep(300)
-        
-        MouseGetPos(,, &mHwnd)
-        if (mHwnd) {
-            try {
-                if InStr(WinGetClass(mHwnd), "WindowsForms10.Window.20808")
-                    return {tries: currentTry}
-            }
-        }
-        Sleep(200)
-    }
-    MsgBox("右クリックメニュー待機タイムアウト")
-    Exit
-}
-
-EnsureConfirmAndClick() {
-    targetBtnText := "確定(&S)"
-    res := {btnAppMs: 0, btnAppTry: 0, diagCloseMs: 0}
-    
-    tStart := A_TickCount
-    Loop 50 {
-        currentBtnTry := A_Index
-        MouseGetPos(,, &parentWin)
-        if (parentWin) {
-            for hCtrl in WinGetControlsHwnd(parentWin) {
-                try {
-                    if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
-                        res.btnAppMs := A_TickCount - tStart
-                        res.btnAppTry := currentBtnTry
-                        
-                        Sleep(100)
-                        Send("!s")
-                        Sleep(100)
-                        
-                        ConfirmDialogWithY("確認")
-                        
-                        ; 消失確認
-                        tWaitClose := A_TickCount
-                        Loop 50 {
-                            if (!ControlGetVisible(hCtrl)) {
-                                res.diagCloseMs := A_TickCount - tWaitClose
-                                return res
-                            }
-                            Sleep(100)
-                        }
-                    }
-                }
-            }
-        }
-        Sleep(100)
-    }
-    MsgBox("確定ボタン検出タイムアウト")
-    Exit
-}
-
-ConfirmDialogWithY(DialogTitle) {
-    if WinWait(DialogTitle,, 1.5) {
-        Sleep(200)
-        Send("y")
-    }
-}
-
-ChangeDate(dayOffset) {
-    dateWinTitle := "基準日から何日前後に登録するか選択"
-    tStart := A_TickCount
-    Loop 30 {
-        currentTry := A_Index
-        if WinExist(dateWinTitle) {
-            resMs := A_TickCount - tStart
-            Sleep(300)
-            Send("{Down " . dayOffset . "}{Enter}{Enter}")
-            WinWait
+WaitContextMenu(clickX, clickY
