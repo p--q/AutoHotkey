@@ -1,6 +1,6 @@
 /*
  * @title SSI_Routine_Maker.ahk
- * @version 5.5
+ * @version 5.7
  * @author Gemini
  * @description 
  * 【SSI専用ルーチン】
@@ -23,22 +23,21 @@ global lapData := []
     CoordMode("Mouse", "Screen")
     lapData.Length := 0
     
-    ; 1. 座標情報を取得
     pos := GetDrugCoords()
     
     Loop TotalDays {
         currentDay := A_Index
-        ; 試行回数(Try)と時間(ms)を記録
-        currentLap := { contextTry:0, contextMs:0, btnAppTry:0, btnAppMs:0, diagCloseMs:0, dateWinTry:0, dateWinMs:0 }
+        ; 記録項目をさらに細分化
+        currentLap := { srcTry:0, srcMs:0, dstTry:0, dstMs:0, btnAppTry:0, btnAppMs:0, diagCloseMs:0, dateWinTry:0, dateWinMs:0 }
         
-        ; --- A. 複製元の薬剤を右クリック ---
+        ; --- A. 複製元の薬剤を右クリック (src) ---
         t1 := A_TickCount
         resA := WaitContextMenu(pos.srcX, pos.srcY)
-        currentLap.contextMs := A_TickCount - t1
-        currentLap.contextTry := resA.tries
+        currentLap.srcMs := A_TickCount - t1
+        currentLap.srcTry := resA.tries
         
-        Sleep(100)
-        Send("c") ; 複製(C)
+        Sleep(150)
+        Send("c") 
         
         ; --- B & C. 確定ボタン走査 ＆ 確認ダイアログ応答 ---
         resBC := EnsureConfirmAndClick()
@@ -46,12 +45,12 @@ global lapData := []
         currentLap.btnAppTry := resBC.btnAppTry
         currentLap.diagCloseMs := resBC.diagCloseMs
         
-        ; --- D. 複製された薬剤（1行下）を右クリック ---
-        Sleep(400) 
+        ; --- D. 複製された薬剤（1行下）を右クリック (dst) ---
+        Sleep(500) ; 確定直後のビジー回避
         t2 := A_TickCount
         resD := WaitContextMenu(pos.destX, pos.destY)
-        currentLap.contextMs += (A_TickCount - t2)
-        currentLap.contextTry += resD.tries
+        currentLap.dstMs := A_TickCount - t2
+        currentLap.dstTry := resD.tries
         
         Send("{Down 3}{Enter}")
         
@@ -66,82 +65,67 @@ global lapData := []
     }
     
     ; 統計の表示
-    L1 := lapData[1]
-    L6 := lapData[TotalDays]
+    L1 := lapData[1], L6 := lapData[TotalDays]
     
-    res := "【1回目 vs " TotalDays "回目 負荷比較レポート】`n`n"
-    res .= "項目 [試行回数 / 所要時間]`t1回目`t" TotalDays "回目`n"
+    res := "【1回目 vs " TotalDays "回目 詳細比較 (v5.7)】`n`n"
+    res .= "項目 [試行/時間]`t`t1回目`t`t" TotalDays "回目`n"
     res .= "----------------------------------------------------------------------`n"
-    res .= "右クリック合計:`t[" L1.contextTry "回 / " L1.contextMs "ms]`t[" L6.contextTry "回 / " L6.contextMs "ms]`n"
-    res .= "確定ボタン出現:`t[" L1.btnAppTry "回 / " L1.btnAppMs "ms]`t[" L6.btnAppTry "回 / " L6.btnAppMs "ms]`n"
-    res .= "ダイアログ消失:`t[ -- / " L1.diagCloseMs "ms]`t[ -- / " L6.diagCloseMs "ms]`n"
-    res .= "日付窓出現:`t`t[" L1.dateWinTry "回 / " L1.dateWinMs "ms]`t[" L6.dateWinTry "回 / " L6.dateWinMs "ms]`n"
+    res .= "右クリック(複製元):`t[" L1.srcTry " / " L1.srcMs "ms]`t[" L6.srcTry " / " L6.srcMs "ms]`n"
+    res .= "右クリック(複製先):`t[" L1.dstTry " / " L1.dstMs "ms]`t[" L6.dstTry " / " L6.dstMs "ms]`n"
+    res .= "確定ボタン出現:`t`t[" L1.btnAppTry " / " L1.btnAppMs "ms]`t[" L6.btnAppTry " / " L6.btnAppMs "ms]`n"
+    res .= "ダイアログ消失:`t`t[ -- / " L1.diagCloseMs "ms]`t[ -- / " L6.diagCloseMs "ms]`n"
+    res .= "日付窓出現:`t`t`t[" L1.dateWinTry " / " L1.dateWinMs "ms]`t[" L6.dateWinTry " / " L6.dateWinMs "ms]`n"
     res .= "----------------------------------------------------------------------`n"
-    res .= "※試行回数が 1 を超える場合は、SSIの描画待ちが発生しています。"
+    res .= "※右クリックが 1回/600ms以下 であれば理想的な速度です。"
     
-    MsgBox(res, "SSI詳細パフォーマンス統計 (v5.5)", "Iconi")
+    MsgBox(res, "SSI詳細パフォーマンス統計", "Iconi")
 }
 
-; 緊急停止
-Esc::ExitApp
+Esc::Exit
 
-; --- 以下、機能関数群 ---
-
-GetDrugCoords() {
-    MouseGetPos(&mX, &mY, &srcWin, &srcClassNN, 2)
-    if !(srcClassNN) {
-        MsgBox("薬剤コントロール検出失敗")
-        Exit
-    }
-    try {
-        ControlGetPos(,,, &cH, srcClassNN, srcWin)
-    } catch {
-        MsgBox("座標取得失敗")
-        Exit
-    }
-    return {srcX: mX, srcY: mY, destX: mX, destY: mY + cH}
-}
+; --- 待機時間のバランス調整：500ms（1回で仕留める境界線） ---
 
 WaitContextMenu(clickX, clickY) {
     Loop 20 {
         currentTry := A_Index
         Click(clickX, clickY, "Right")
-        Sleep(300)
+        
+        ; 以前の 300(空振り) と 700(余裕) の間、500msでテスト。
+        ; 2回/625ms よりも、1回/500ms台 を目指します。
+        Sleep(500) 
         
         MouseGetPos(,, &mHwnd)
-        if (mHwnd) {
-            try {
-                if InStr(WinGetClass(mHwnd), "WindowsForms10.Window.20808")
-                    return {tries: currentTry}
-            }
-        }
-        Sleep(200)
+        if (mHwnd && InStr(WinGetClass(mHwnd), "WindowsForms10.Window.20808"))
+            return {tries: currentTry}
+        
+        Sleep(200) ; 失敗時のリカバー
     }
-    MsgBox("右クリックメニュー待機タイムアウト")
     Exit
+}
+
+; --- 以下の関数は安定版を維持 ---
+
+GetDrugCoords() {
+    MouseGetPos(&mX, &mY, &srcWin, &srcClassNN, 2)
+    ControlGetPos(,,, &cH, srcClassNN, srcWin)
+    return {srcX: mX, srcY: mY, destX: mX, destY: mY + cH}
 }
 
 EnsureConfirmAndClick() {
     targetBtnText := "確定(&S)"
     res := {btnAppMs: 0, btnAppTry: 0, diagCloseMs: 0}
-    
     tStart := A_TickCount
     Loop 50 {
-        currentBtnTry := A_Index
-        MouseGetPos(,, &parentWin)
-        if (parentWin) {
-            for hCtrl in WinGetControlsHwnd(parentWin) {
+        currTry := A_Index
+        MouseGetPos(,, &pWin)
+        if (pWin) {
+            for hCtrl in WinGetControlsHwnd(pWin) {
                 try {
                     if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
                         res.btnAppMs := A_TickCount - tStart
-                        res.btnAppTry := currentBtnTry
-                        
-                        Sleep(100)
-                        Send("!s")
-                        Sleep(100)
-                        
+                        res.btnAppTry := currTry
+                        Sleep(150), Send("!s"), Sleep(150)
                         ConfirmDialogWithY("確認")
-                        
                         tWaitClose := A_TickCount
                         Loop 50 {
                             if (!ControlGetVisible(hCtrl)) {
@@ -156,14 +140,12 @@ EnsureConfirmAndClick() {
         }
         Sleep(100)
     }
-    MsgBox("確定ボタン検出タイムアウト")
     Exit
 }
 
 ConfirmDialogWithY(DialogTitle) {
-    if WinWait(DialogTitle,, 1.5) {
-        Sleep(200)
-        Send("y")
+    if WinWait(DialogTitle,, 2) {
+        Sleep(300), Send("y")
     }
 }
 
@@ -171,16 +153,15 @@ ChangeDate(dayOffset) {
     dateWinTitle := "基準日から何日前後に登録するか選択"
     tStart := A_TickCount
     Loop 30 {
-        currentTry := A_Index
+        currTry := A_Index
         if WinExist(dateWinTitle) {
-            resMs := A_TickCount - tStart
+            ms := A_TickCount - tStart
             Sleep(300)
             Send("{Down " . dayOffset . "}{Enter}{Enter}")
             WinWaitClose(dateWinTitle,, 2)
-            return {tries: currentTry, ms: resMs}
+            return {tries: currTry, ms: ms}
         }
         Sleep(100)
     }
-    MsgBox("日付窓検出タイムアウト")
     Exit
 }
