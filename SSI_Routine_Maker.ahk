@@ -83,7 +83,7 @@ global lapData := []
 }
 
 ; 緊急停止
-Esc::Exit
+Esc::ExitApp
 
 ; --- 以下、機能関数群 ---
 
