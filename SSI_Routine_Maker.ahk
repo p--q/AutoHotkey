@@ -1,6 +1,6 @@
 /*
  * @title SSI_Routine_Maker.ahk
- * @version 5.7
+ * @version 6.2
  * @author Gemini
  * @description 
  * 【SSI専用ルーチン】
@@ -8,10 +8,9 @@
  * コピーしたい点滴のチェックボックスのある枠上で「Shift+右クリック」すると開始します。
  * * 仕組み:
  * 1. 薬剤の1行下の座標をコントロールの高さから自動計算します。
- * 2. コンテキストメニューが出るまで右クリックをリトライします。
- * 3. 確定ボタンをマウス下のウィンドウハンドル(HWND)から全走査して特定します。
- * 4. 日付選択ウィンドウで指定日数分だけDownキーを送り日付をずらします。
- * * 中止したい場合は「Esc」キーを押してください。
+ * 2. コンテキストメニューが出るまで超高速でリトライ判定を行います。
+ * 3. 確定ボタンを全走査して特定し、出現した瞬間にクリックします。
+ * 4. 日付選択ウィンドウの出現をミリ秒単位で監視し、即座にキーを送ります。
  */
 
 #Requires AutoHotkey v2.0
@@ -27,16 +26,14 @@ global lapData := []
     
     Loop TotalDays {
         currentDay := A_Index
-        ; 記録項目をさらに細分化
         currentLap := { srcTry:0, srcMs:0, dstTry:0, dstMs:0, btnAppTry:0, btnAppMs:0, diagCloseMs:0, dateWinTry:0, dateWinMs:0 }
         
-        ; --- A. 複製元の薬剤を右クリック (src) ---
+        ; --- A. 複製元の右クリック (src) ---
         t1 := A_TickCount
-        resA := WaitContextMenu(pos.srcX, pos.srcY)
+        resA := MachineGunClick(pos.srcX, pos.srcY)
         currentLap.srcMs := A_TickCount - t1
         currentLap.srcTry := resA.tries
         
-        Sleep(150)
         Send("c") 
         
         ; --- B & C. 確定ボタン走査 ＆ 確認ダイアログ応答 ---
@@ -46,9 +43,10 @@ global lapData := []
         currentLap.diagCloseMs := resBC.diagCloseMs
         
         ; --- D. 複製された薬剤（1行下）を右クリック (dst) ---
-        Sleep(500) ; 確定直後のビジー回避
+        ; 確定処理後のビジー時間を考慮しつつ、最短で再開
+        Sleep(300) 
         t2 := A_TickCount
-        resD := WaitContextMenu(pos.destX, pos.destY)
+        resD := MachineGunClick(pos.destX, pos.destY)
         currentLap.dstMs := A_TickCount - t2
         currentLap.dstTry := resD.tries
         
@@ -61,61 +59,55 @@ global lapData := []
         currentLap.dateWinTry := resE.tries
         
         lapData.Push(currentLap)
-        Sleep(600)
+        
+        ; 次のループへの待機も最小限に
+        Sleep(200)
     }
     
-    ; 統計の表示
     L1 := lapData[1], L6 := lapData[TotalDays]
     
-    res := "【1回目 vs " TotalDays "回目 詳細比較 (v5.7)】`n`n"
-    res .= "項目 [試行/時間]`t`t1回目`t`t" TotalDays "回目`n"
+    res := "【マシンガン・ポーリング解析 (v6.2)】`n`n"
+    res .= "項目 [試行/時間]`t`t1回目`t`t6回目`n"
     res .= "----------------------------------------------------------------------`n"
     res .= "右クリック(複製元):`t[" L1.srcTry " / " L1.srcMs "ms]`t[" L6.srcTry " / " L6.srcMs "ms]`n"
     res .= "右クリック(複製先):`t[" L1.dstTry " / " L1.dstMs "ms]`t[" L6.dstTry " / " L6.dstMs "ms]`n"
     res .= "確定ボタン出現:`t`t[" L1.btnAppTry " / " L1.btnAppMs "ms]`t[" L6.btnAppTry " / " L6.btnAppMs "ms]`n"
-    res .= "ダイアログ消失:`t`t[ -- / " L1.diagCloseMs "ms]`t[ -- / " L6.diagCloseMs "ms]`n"
     res .= "日付窓出現:`t`t`t[" L1.dateWinTry " / " L1.dateWinMs "ms]`t[" L6.dateWinTry " / " L6.dateWinMs "ms]`n"
     res .= "----------------------------------------------------------------------`n"
-    res .= "※右クリックが 1回/600ms以下 であれば理想的な速度です。"
+    res .= "※このモードではTry回数が増えるほど「最速で隙間を突いた」ことになります。"
     
     MsgBox(res, "SSI詳細パフォーマンス統計", "Iconi")
 }
 
-Esc::Exit
+Esc::ExitApp
 
-; --- 待機時間のバランス調整：500ms（1回で仕留める境界線） ---
+; --- 改善の核：高速リトライ・ポーリング ---
 
-WaitContextMenu(clickX, clickY) {
-    Loop 20 {
+MachineGunClick(cX, cY) {
+    ; 初回クリック
+    Click(cX, cY, "Right")
+    Loop 50 {
         currentTry := A_Index
-        Click(clickX, clickY, "Right")
+        ; 判定スパンを極短(50ms)に設定。
+        ; メニューが出ていなければ、200msごとに追加クリックを叩き込む「攻め」の姿勢
+        if (Mod(A_Index, 4) == 0) {
+            Click(cX, cY, "Right")
+        }
         
-        ; 以前の 300(空振り) と 700(余裕) の間、500msでテスト。
-        ; 2回/625ms よりも、1回/500ms台 を目指します。
-        Sleep(500) 
+        Sleep(50) 
         
         MouseGetPos(,, &mHwnd)
         if (mHwnd && InStr(WinGetClass(mHwnd), "WindowsForms10.Window.20808"))
             return {tries: currentTry}
-        
-        Sleep(200) ; 失敗時のリカバー
     }
     Exit
-}
-
-; --- 以下の関数は安定版を維持 ---
-
-GetDrugCoords() {
-    MouseGetPos(&mX, &mY, &srcWin, &srcClassNN, 2)
-    ControlGetPos(,,, &cH, srcClassNN, srcWin)
-    return {srcX: mX, srcY: mY, destX: mX, destY: mY + cH}
 }
 
 EnsureConfirmAndClick() {
     targetBtnText := "確定(&S)"
     res := {btnAppMs: 0, btnAppTry: 0, diagCloseMs: 0}
     tStart := A_TickCount
-    Loop 50 {
+    Loop 100 {
         currTry := A_Index
         MouseGetPos(,, &pWin)
         if (pWin) {
@@ -124,44 +116,57 @@ EnsureConfirmAndClick() {
                     if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
                         res.btnAppMs := A_TickCount - tStart
                         res.btnAppTry := currTry
-                        Sleep(150), Send("!s"), Sleep(150)
+                        ; ボタンが見えた瞬間に !s を送り、ダイアログを待ち受ける
+                        Send("!s")
                         ConfirmDialogWithY("確認")
+                        
                         tWaitClose := A_TickCount
                         Loop 50 {
                             if (!ControlGetVisible(hCtrl)) {
                                 res.diagCloseMs := A_TickCount - tWaitClose
                                 return res
                             }
-                            Sleep(100)
+                            Sleep(30)
                         }
                     }
                 }
             }
         }
-        Sleep(100)
+        Sleep(30)
     }
     Exit
 }
 
 ConfirmDialogWithY(DialogTitle) {
-    if WinWait(DialogTitle,, 2) {
-        Sleep(300), Send("y")
+    ; ダイアログが出るまで 30ms 刻みで監視
+    Loop 50 {
+        if WinExist(DialogTitle) {
+            Send("y")
+            return
+        }
+        Sleep(30)
     }
 }
 
 ChangeDate(dayOffset) {
     dateWinTitle := "基準日から何日前後に登録するか選択"
     tStart := A_TickCount
-    Loop 30 {
+    Loop 50 {
         currTry := A_Index
         if WinExist(dateWinTitle) {
             ms := A_TickCount - tStart
-            Sleep(300)
+            ; ウィンドウ検知からキー送信までのラグを抹殺
             Send("{Down " . dayOffset . "}{Enter}{Enter}")
-            WinWaitClose(dateWinTitle,, 2)
+            WinWaitClose(dateWinTitle,, 1)
             return {tries: currTry, ms: ms}
         }
-        Sleep(100)
+        Sleep(30)
     }
     Exit
+}
+
+GetDrugCoords() {
+    MouseGetPos(&mX, &mY, &srcWin, &srcClassNN, 2)
+    ControlGetPos(,,, &cH, srcClassNN, srcWin)
+    return {srcX: mX, srcY: mY, destX: mX, destY: mY + cH}
 }
