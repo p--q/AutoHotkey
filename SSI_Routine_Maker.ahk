@@ -1,16 +1,12 @@
 /*
  * @title SSI_Routine_Maker.ahk
- * @version 6.2
+ * @version 6.7
  * @author Gemini
  * @description 
- * 【SSI専用ルーチン】
- * 1920x1080の画面で最大化したときにセットメニューの点滴を6日分コピーします。
- * コピーしたい点滴のチェックボックスのある枠上で「Shift+右クリック」すると開始します。
- * * 仕組み:
- * 1. 薬剤の1行下の座標をコントロールの高さから自動計算します。
- * 2. コンテキストメニューが出るまで超高速でリトライ判定を行います。
- * 3. 確定ボタンを全走査して特定し、出現した瞬間にクリックします。
- * 4. 日付選択ウィンドウの出現をミリ秒単位で監視し、即座にキーを送ります。
+ * 【SSI専用ルーチン：最速安定版】
+ * 1. 処理開始から終了までの「総経過時間」を計測・表示します。
+ * 2. SSIをフリーズさせるパーツ走査を完全に排除。
+ * 3. 確定(!s)と確認(y)を最短リズムで流し込みます。
  */
 
 #Requires AutoHotkey v2.0
@@ -22,147 +18,101 @@ global lapData := []
     CoordMode("Mouse", "Screen")
     lapData.Length := 0
     
+    ; 全体の開始時間を記録
+    GlobalStart := A_TickCount
+    
     pos := GetDrugCoords()
     
     Loop TotalDays {
         currentDay := A_Index
-        currentLap := { srcTry:0, srcMs:0, dstTry:0, dstMs:0, btnAppTry:0, btnAppMs:0, diagCloseMs:0, dateWinTry:0, dateWinMs:0 }
+        currentLap := { srcTry:0, srcMs:0, dstTry:0, dstMs:0, btnAppMs:0, dateWinMs:0 }
         
-        ; --- A. 複製元の右クリック (src) ---
-        t1 := A_TickCount
+        ; --- A. 複製元の右クリック ---
         resA := MachineGunClick(pos.srcX, pos.srcY)
-        currentLap.srcMs := A_TickCount - t1
+        currentLap.srcMs := resA.ms
         currentLap.srcTry := resA.tries
         
         Send("c") 
         
-        ; --- B & C. 確定ボタン走査 ＆ 確認ダイアログ応答 ---
-        resBC := EnsureConfirmAndClick()
-        currentLap.btnAppMs := resBC.btnAppMs
-        currentLap.btnAppTry := resBC.btnAppTry
-        currentLap.diagCloseMs := resBC.diagCloseMs
+        ; --- B & C. 確定処理 (走査なし・最短流し込み) ---
+        tB := A_TickCount
+        Sleep(350) ; 描画待ち
+        Loop 5 {
+            Send("!s") 
+            Sleep(60)
+            if WinExist("確認") {
+                Send("y")
+                break
+            }
+            Sleep(40)
+        }
+        currentLap.btnAppMs := A_TickCount - tB
         
-        ; --- D. 複製された薬剤（1行下）を右クリック (dst) ---
-        ; 確定処理後のビジー時間を考慮しつつ、最短で再開
-        Sleep(300) 
-        t2 := A_TickCount
+        ; --- D. 複製された薬剤（1行下）を右クリック ---
+        Sleep(400) 
         resD := MachineGunClick(pos.destX, pos.destY)
-        currentLap.dstMs := A_TickCount - t2
+        currentLap.dstMs := resD.ms
         currentLap.dstTry := resD.tries
         
         Send("{Down 3}{Enter}")
         
         ; --- E. 日付変更処理 ---
-        t3 := A_TickCount
         resE := ChangeDate(currentDay)
-        currentLap.dateWinMs := A_TickCount - t3
-        currentLap.dateWinTry := resE.tries
+        currentLap.dateWinMs := resE.ms
         
         lapData.Push(currentLap)
-        
-        ; 次のループへの待機も最小限に
         Sleep(200)
     }
     
-    L1 := lapData[1], L6 := lapData[TotalDays]
+    ; 全体の経過時間を算出
+    TotalElapsed := (A_TickCount - GlobalStart) / 1000
     
-    res := "【マシンガン・ポーリング解析 (v6.2)】`n`n"
-    res .= "項目 [試行/時間]`t`t1回目`t`t6回目`n"
+    L1 := lapData[1], L6 := lapData[TotalDays]
+    res := "【SSI詳細パフォーマンス統計 (v6.7)】`n`n"
+    res .= "★総経過時間: " . Format("{:.2f}", TotalElapsed) . " 秒`n`n"
+    res .= "項目 [時間]`t`t1回目`t`t6回目`n"
     res .= "----------------------------------------------------------------------`n"
-    res .= "右クリック(複製元):`t[" L1.srcTry " / " L1.srcMs "ms]`t[" L6.srcTry " / " L6.srcMs "ms]`n"
-    res .= "右クリック(複製先):`t[" L1.dstTry " / " L1.dstMs "ms]`t[" L6.dstTry " / " L6.dstMs "ms]`n"
-    res .= "確定ボタン出現:`t`t[" L1.btnAppTry " / " L1.btnAppMs "ms]`t[" L6.btnAppTry " / " L6.btnAppMs "ms]`n"
-    res .= "日付窓出現:`t`t`t[" L1.dateWinTry " / " L1.dateWinMs "ms]`t[" L6.dateWinTry " / " L6.dateWinMs "ms]`n"
+    res .= "右クリック(元):`t" L1.srcMs "ms`t`t" L6.srcMs "ms`n"
+    res .= "右クリック(先):`t" L1.dstMs "ms`t`t" L6.dstMs "ms`n"
+    res .= "確定ボタン処理:`t" L1.btnAppMs "ms`t`t" L6.btnAppMs "ms`n"
+    res .= "日付窓出現:`t`t" L1.dateWinMs "ms`t`t" L6.dateWinMs "ms`n"
     res .= "----------------------------------------------------------------------`n"
-    res .= "※このモードではTry回数が増えるほど「最速で隙間を突いた」ことになります。"
+    res .= "Escキーでいつでも終了(ExitApp)できます。"
     
     MsgBox(res, "SSI詳細パフォーマンス統計", "Iconi")
 }
 
+; 緊急停止（完全に終了）
 Esc::ExitApp
 
-; --- 改善の核：高速リトライ・ポーリング ---
+; --- 最速化関数群 ---
 
 MachineGunClick(cX, cY) {
-    ; 初回クリック
+    tS := A_TickCount
     Click(cX, cY, "Right")
-    Loop 50 {
-        currentTry := A_Index
-        ; 判定スパンを極短(50ms)に設定。
-        ; メニューが出ていなければ、200msごとに追加クリックを叩き込む「攻め」の姿勢
-        if (Mod(A_Index, 4) == 0) {
+    Loop 20 {
+        curTry := A_Index
+        if (Mod(A_Index, 4) == 0)
             Click(cX, cY, "Right")
-        }
-        
         Sleep(50) 
-        
         MouseGetPos(,, &mHwnd)
         if (mHwnd && InStr(WinGetClass(mHwnd), "WindowsForms10.Window.20808"))
-            return {tries: currentTry}
+            return {tries: curTry, ms: A_TickCount - tS}
     }
-    Exit
-}
-
-EnsureConfirmAndClick() {
-    targetBtnText := "確定(&S)"
-    res := {btnAppMs: 0, btnAppTry: 0, diagCloseMs: 0}
-    tStart := A_TickCount
-    Loop 100 {
-        currTry := A_Index
-        MouseGetPos(,, &pWin)
-        if (pWin) {
-            for hCtrl in WinGetControlsHwnd(pWin) {
-                try {
-                    if (InStr(ControlGetText(hCtrl), targetBtnText) && ControlGetVisible(hCtrl)) {
-                        res.btnAppMs := A_TickCount - tStart
-                        res.btnAppTry := currTry
-                        ; ボタンが見えた瞬間に !s を送り、ダイアログを待ち受ける
-                        Send("!s")
-                        ConfirmDialogWithY("確認")
-                        
-                        tWaitClose := A_TickCount
-                        Loop 50 {
-                            if (!ControlGetVisible(hCtrl)) {
-                                res.diagCloseMs := A_TickCount - tWaitClose
-                                return res
-                            }
-                            Sleep(30)
-                        }
-                    }
-                }
-            }
-        }
-        Sleep(30)
-    }
-    Exit
-}
-
-ConfirmDialogWithY(DialogTitle) {
-    ; ダイアログが出るまで 30ms 刻みで監視
-    Loop 50 {
-        if WinExist(DialogTitle) {
-            Send("y")
-            return
-        }
-        Sleep(30)
-    }
+    return {tries: 20, ms: A_TickCount - tS}
 }
 
 ChangeDate(dayOffset) {
     dateWinTitle := "基準日から何日前後に登録するか選択"
     tStart := A_TickCount
     Loop 50 {
-        currTry := A_Index
         if WinExist(dateWinTitle) {
-            ms := A_TickCount - tStart
-            ; ウィンドウ検知からキー送信までのラグを抹殺
             Send("{Down " . dayOffset . "}{Enter}{Enter}")
-            WinWaitClose(dateWinTitle,, 1)
-            return {tries: currTry, ms: ms}
+            return {tries: A_Index, ms: A_TickCount - tStart}
         }
         Sleep(30)
     }
-    Exit
+    return {tries: 50, ms: A_TickCount - tStart}
 }
 
 GetDrugCoords() {
