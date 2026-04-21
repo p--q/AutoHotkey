@@ -1,3 +1,14 @@
+; ==============================================================================
+; File Name: PrescriptionFormatter.ahk
+; Version:   1.1.0
+; Description:
+;   処方箋・カルテテキスト整形スクリプト (AutoHotkey v2.0用)
+;   
+;   【更新履歴】
+;   1.1.0: 頓服薬の結合ロジックを強化。
+;          「～時」「～まで」といった用法を薬品名・数量と同じ行にまとめるよう調整。
+; ==============================================================================
+
 #Requires AutoHotkey v2.0
 
 ; --- Win + Alt + S: 用法なし整形 ---
@@ -54,6 +65,7 @@
         text := ReorganizeByTrigger(text)
     }
     
+    ; 頓服などの特殊な改行パターンの結合
     text := MergeSpecificPatterns(text)
     text := RegExReplace(text, "[ \t]+", "")
     
@@ -62,15 +74,21 @@
         if (line == "") {
             continue
         }
+        
+        ; 用法の簡略化
         if (RegExMatch(line, "^(分\d|1日\d回|1日\d枚)")) {
             line := RegExReplace(line, "毎(?=.)|食後", "")
             line := RegExReplace(line, "(?:と)?眠前", "寝")
             line := RegExReplace(line, "食前", "前")
             line := RegExReplace(line, "\[食間\]", "")
             line := StrReplace(line, "分1", "")
+            
             isBlock := InStr(line, "@@BLOCK@@")
             line := StrReplace(line, "@@BLOCK@@", "")
+            
             prevLine := (processedLines.Length > 0) ? processedLines[processedLines.Length] : ""
+            
+            ; 直前の行が「～時」で終わっていない場合は結合
             if (!isBlock && processedLines.Length > 0 && !RegExMatch(prevLine, "時\s*$")) {
                 processedLines[processedLines.Length] .= line
             } else {
@@ -87,7 +105,9 @@
     }
         
     text := FinalizeText(resText)
-    text := RegExReplace(text, "m)\s\d+枚\R外\)\s*(1日\s*\d+枚)$", " $1")
+    ; 最終的な微調整（「～時」の後の不要な改行を詰め、指示通りなどの不要語削除）
+    text := RegExReplace(text, "m)時\R+", "時")
+    text := RegExReplace(text, "医師の指示通り", "")
     
     A_Clipboard := text
     ToolTip(info.Msg)
@@ -129,7 +149,8 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "s)\s*\([^)]+として\)", "")
     text := RegExReplace(text, "m)\d+\S+分$", "")
     text := StrReplace(text, "吸入用", "")
-    text := RegExReplace(text, "i)(\d+)\s*([錠p枚ﾄ]|cap|g)", "@@SPACE@@$1$2")
+    ; 薬品名と数量の間にスペースを入れるためのフラグ
+    text := RegExReplace(text, "i)(\d+)\s*([錠p枚ﾄ個]|cap|g|mL)", "@@SPACE@@$1$2")
     text := RegExReplace(text, "i)cap", "c")
     return text
 }
@@ -166,6 +187,7 @@ ReorganizeByTrigger(text) {
                 finalOutput .= buffer . line . (triggerCount > 1 ? "@@BLOCK@@" : "") . "`n"
                 buffer := ""
             } else {
+                ; 空白がない行（薬品名の続きなど）をバッファして結合
                 if (!InStr(line, " ") && !InStr(line, "　")) {
                     buffer .= line
                 } else {
@@ -190,7 +212,9 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-        if (RegExMatch(line, "^.+時\s*$")) {
+        
+        ; 「～時」や「～まで」で始まる行、または「頓）」を含む行の結合処理
+        if (RegExMatch(line, "^(頓|.*時|.*まで)\s*$")) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@")) {
                 result[result.Length] .= line
             } else {
@@ -218,6 +242,7 @@ FinalizeText(text) {
     text := StrReplace(text, "@@BLOCK@@", "")
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
+    text := StrReplace(text, "頓)", "")
     text := RegExReplace(text, " +", " ")
     return Trim(text, "`n`r")
 }
