@@ -151,7 +151,7 @@ ApplyBasicFormatting(text) {
     text := RegExReplace(text, "m)\d+\S+分$", "") ; 行末の「7日分」などを削除
     text := StrReplace(text, "吸入用", "")
     ; 数量（錠、mLなど）の前に、後でスペースに変換するための「@@SPACE@@」を付与
-    text := RegExReplace(text, "i)(\d+)\s*([錠p枚ﾄ個]|cap|g|mL)", "@@SPACE@@$1$2")  ; 個は最後に削るが分割行を結合するトリガーに@@SPACE@@を使うためにここでは必要。
+    text := RegExReplace(text, "i)(\d+)([錠p枚個]|cap|g|mL|ｷｯﾄ)", "@@SPACE@@$1$2")  ; 個は最後に削るが分割行を結合するトリガーに@@SPACE@@を使うためにここでは必要。
     text := RegExReplace(text, "i)cap", "c")
     return text
 }
