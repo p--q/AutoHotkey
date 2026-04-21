@@ -244,6 +244,7 @@ MergeSpecificPatterns(text) {
 
 ; 最終的な仕上げ（目印の除去、余分なスペースの整理）
 FinalizeText(text) {
+    text := RegExReplace(text, "m)@@SPACE@@\d+個$", "")  ; 個で終わる単位を消去。
     text := StrReplace(text, "@@SPACE@@", " ")
     text := StrReplace(text, "@@BLOCK@@", "")
     text := RegExReplace(text, "\(\Sとして\)", "")
