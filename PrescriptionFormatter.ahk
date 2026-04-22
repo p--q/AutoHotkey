@@ -221,15 +221,17 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-        ; 「外）」で始まる行を前の行に結合
+        
+        ; --- 修正箇所：条件分岐の整理 ---
         if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
+            ; 「外）」で始まる行を前の行に結合
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@")) {
                 result[result.Length] .= "@@SPACE@@" . m[1]
             } else {
                 result.Push("@@SPACE@@" . m[1])
             }
-        ; 見つかった位置が 1 より大きい（＝2文字目以降にある）場合のみ実行
         } else if (InStr(line, "時") > 1) {
+            ; 「時」が2文字目以降にある場合のみ前の行に結合
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@")) {
                 result[result.Length] .= line
             } else {
@@ -240,6 +242,7 @@ MergeSpecificPatterns(text) {
             result.Push(line)
         }
     }
+    
     resFinal := ""
     for l in result {
         resFinal .= l "`n"
