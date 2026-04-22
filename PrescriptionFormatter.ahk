@@ -208,6 +208,7 @@ ReorganizeByTrigger(text) {
 
 ; 特定のパターン（時、外）を前の行と結合する
 MergeSpecificPatterns(text) {
+    text := RegExReplace(text, "m)@@SPACE@@\d+個$", "")  ; 個で終わる単位を消去。
     lines := StrSplit(text, "`n", "`r"), result := []
     for line in lines {
         if (line == "") {
@@ -221,7 +222,6 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-        text := RegExReplace(text, "m)@@SPACE@@\d+個$", "")  ; 個で終わる単位を消去。
         ; --- 条件判定の整理 ---
         if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
             ; 「外）」で始まる行を前の行に結合
