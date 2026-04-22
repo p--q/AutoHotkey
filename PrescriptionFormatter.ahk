@@ -221,23 +221,20 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-        ; 見つかった位置が 1 より大きい（＝2文字目以降にある）場合のみ実行
-        if (InStr(line, "時") > 1) {
-            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@")) {
-                result[result.Length] .= line
-            } else {
-                result.Push(line)
-            }
-        }
         ; 「外）」で始まる行を前の行に結合
-        } else if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
+        if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@")) {
                 result[result.Length] .= "@@SPACE@@" . m[1]
             } else {
                 result.Push("@@SPACE@@" . m[1])
             }
-        } else {
-            result.Push(line)
+        ; 見つかった位置が 1 より大きい（＝2文字目以降にある）場合のみ実行
+        } else if (InStr(line, "時") > 1) {
+            if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@")) {
+                result[result.Length] .= line
+            } else {
+                result.Push(line)
+            }
         }
     }
     resFinal := ""
