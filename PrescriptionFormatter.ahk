@@ -208,7 +208,7 @@ ReorganizeByTrigger(text) {
 
 ; 特定のパターン（時、外）を前の行と結合する
 MergeSpecificPatterns(text) {
-    text := RegExReplace(text, "m)@@SPACE@@\d+個$", " ")  ; 個で終わる単位を消去。
+    text := RegExReplace(text, "m)@@SPACE@@\d+個$", "@@SPACE@@")  ; 個で終わる単位を消去。
     lines := StrSplit(text, "`n", "`r"), result := []
     for line in lines {
         if (line == "") {
