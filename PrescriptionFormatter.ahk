@@ -221,8 +221,8 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-        
-        ; --- 修正箇所：条件分岐の整理 ---
+
+        ; --- 条件判定の整理 ---
         if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
             ; 「外）」で始まる行を前の行に結合
             if (result.Length > 0 && !InStr(result[result.Length], "@@BLOCK@@")) {
@@ -238,18 +238,17 @@ MergeSpecificPatterns(text) {
                 result.Push(line)
             }
         } else {
-            ; ★重要★ 「外）」でも「時」でもない普通の行を結果に追加する
+            ; ★ここが重要：普通の薬品名などの行をリストに追加する
             result.Push(line)
         }
     }
-    
+
     resFinal := ""
     for l in result {
         resFinal .= l "`n"
     }
     return resFinal
 }
-
 ; 最終的な仕上げ（目印の除去、余分なスペースの整理）
 FinalizeText(text) {
     text := RegExReplace(text, "m)@@SPACE@@\d+個$", "")  ; 個で終わる単位を消去。
