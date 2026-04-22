@@ -1,6 +1,6 @@
 ; ==============================================================================
 ; File Name: PrescriptionFormatter.ahk
-; Version:   1.1.0 (Base)
+; Version:   1.2.0 
 ; Description:
 ;   処方箋・電子カルテのテキストを整形するスクリプト。
 ;   全角を半角に変換し、不要な空白や特定のキーワードを除去・簡略化します。
@@ -87,8 +87,8 @@
             line := StrReplace(line, "@@BLOCK@@", "")
             
             prevLine := (processedLines.Length > 0) ? processedLines[processedLines.Length] : ""
-            ; 薬品名の行に用法をくっつける（直前が「時」で終わる特殊な場合を除く）
-            if (!isBlock && processedLines.Length > 0 && !RegExMatch(prevLine, "時\s*$")) {
+            ; 薬品名の行に用法をくっつける
+            if (!isBlock && processedLines.Length > 0) {
                 processedLines[processedLines.Length] .= line
             } else {
                 processedLines.Push(line)
@@ -221,7 +221,7 @@ MergeSpecificPatterns(text) {
             result.Push(line)
             continue
         }
-
+        text := RegExReplace(text, "m)@@SPACE@@\d+個$", "")  ; 個で終わる単位を消去。
         ; --- 条件判定の整理 ---
         if (RegExMatch(line, "^\s*外\)\s*(.*)$", &m)) {
             ; 「外）」で始まる行を前の行に結合
@@ -251,7 +251,6 @@ MergeSpecificPatterns(text) {
 }
 ; 最終的な仕上げ（目印の除去、余分なスペースの整理）
 FinalizeText(text) {
-    text := RegExReplace(text, "m)@@SPACE@@\d+個$", "")  ; 個で終わる単位を消去。
     text := StrReplace(text, "@@SPACE@@", " ")
     text := StrReplace(text, "@@BLOCK@@", "")
     text := RegExReplace(text, "\(\Sとして\)", "")
