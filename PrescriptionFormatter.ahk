@@ -235,6 +235,9 @@ MergeSpecificPatterns(text) {
             } else {
                 result.Push(line)
             }
+        } else {
+            ; ★重要★ 「外）」でも「時」でもない普通の行を結果に追加する
+            result.Push(line)
         }
     }
     resFinal := ""
