@@ -1,6 +1,6 @@
 ; ==============================================================================
 ; File Name: PrescriptionFormatter.ahk
-; Version:   1.2.0 
+; Version:   1.2.1 
 ; Description:
 ;   処方箋・電子カルテのテキストを整形するスクリプト。
 ;   全角を半角に変換し、不要な空白や特定のキーワードを除去・簡略化します。
@@ -255,6 +255,7 @@ FinalizeText(text) {
     text := StrReplace(text, "@@BLOCK@@", "")
     text := RegExReplace(text, "\(\Sとして\)", "")
     text := StrReplace(text, "(非持参)", "")
+    text := StrReplace(text, "(医療用)", "")
     text := RegExReplace(text, " +", " ") ; 連続するスペースを一つに
     return Trim(text, "`n`r")
 }
