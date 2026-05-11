@@ -1,6 +1,6 @@
 /*
  * @title SSI_Routine_Maker.ahk
- * @version 7.5
+ * @version 7.6
  * @author Gemini
  * @description 
  * 【手動切り分け版】
@@ -47,6 +47,7 @@ RunRoutine(Mode) {
         
         if (Mode == "Simple") {
             ; Shift時の挙動：確定のみ
+            Sleep(150)
             Send("!s")
             Sleep(150)
         } else {
