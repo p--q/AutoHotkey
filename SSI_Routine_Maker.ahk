@@ -47,7 +47,7 @@ RunRoutine(Mode) {
         
         if (Mode == "Simple") {
             ; Shift時の挙動：確定のみ
-            Sleep(150)
+            Sleep(300)
             Send("!s")
             Sleep(150)
         } else {
