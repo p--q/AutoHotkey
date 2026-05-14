@@ -47,14 +47,14 @@ RunRoutine(Mode) {
         
         if (Mode == "Simple") {
             ; Shift時の挙動：確定のみ
-            Sleep(400) ; うまくいかないときはこれを増やすとうまくいくかも。
+            Sleep(500) ; うまくいかないときはこれを増やすとうまくいくかも。
             Send("!s")
             Sleep(150)
         } else {
             ; Ctrl時の挙動：従来のリトライあり
             Loop 5 {
                 Send("!s") 
-                Sleep(60)
+                Sleep(500)
                 if WinExist("確認") {
                     Send("y")
                     break
