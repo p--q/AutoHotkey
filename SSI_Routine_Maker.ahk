@@ -47,7 +47,7 @@ RunRoutine(Mode) {
         
         if (Mode == "Simple") {
             ; Shift時の挙動：確定のみ
-            Sleep(300)
+            Sleep(400) ; うまくいかないときはこれを増やすとうまくいくかも。
             Send("!s")
             Sleep(150)
         } else {
